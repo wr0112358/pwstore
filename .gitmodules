@@ -1,0 +1,4 @@
+[submodule ".deps/libaan"]
+	path = .deps/libaan
+	url = https://github.com/wr0112358/libaan.git
+	branch = master

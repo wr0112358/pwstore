@@ -1,0 +1,34 @@
+Password Storage With OpenSSL Backed Cryptography
+
+Work in progress. Not usable yet. (add and lookup works, but retrieving
+the matching password does not.)
+
+
+Missing
+  lookup:
+    dump uid of matched data.
+    lookup by uid with:
+      ./pwstore -n <uid> lookup
+      or
+      ./pwstore -i lookup
+        -> C-x n <uid> <Enter>
+
+  integrate x11 clipboard algorithm (windows equivalent?)
+
+  integrate deps as submodules
+
+  gui:
+    disable echo
+    select
+
+
+Usage
+  Add some data:
+  ./pwstore add
+  Or add some provided test data:
+  ./pwstore init
+
+  Interactive lookup:
+  ./pwstore -i lookup
+
+  Interactive mode displays the supported keyboard shortcuts per default.
