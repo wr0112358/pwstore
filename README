@@ -42,3 +42,9 @@ Usage
   ./pwstore -i lookup
 
   Interactive mode displays the supported keyboard shortcuts per default.
+
+
+Get it
+  Recursive clone, to get the deps too.
+  git clone --recursive <this-repo>
+  make pwstore
