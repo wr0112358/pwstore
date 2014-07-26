@@ -14,6 +14,7 @@
 #include "libaan/crypto_util.hh"
 #include "libaan/file_util.hh"
 #include "libaan/terminal_util.hh"
+#include "libaan/x11_util.hh"
 
 namespace {
 
@@ -21,9 +22,15 @@ struct config_type {
     enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP } mode;
     bool interactive;
     std::string lookup_key;
+    pw_store::data_type::id_type uid;
 };
 
+#ifndef NO_GOOD
 const auto CIPHER_DB = "/tmp/.pwstore.crypt";
+#else
+const auto CIPHER_DB = ".pwstore.crypt";
+#endif
+
 
 bool SIGINT_CAUGHT = false;
 void sigint_handler(int signum)
@@ -34,6 +41,7 @@ void sigint_handler(int signum)
         SIGINT_CAUGHT = true;
     }
 }
+
 
 std::list<pw_store::data_type> test_data = {
     {"ebay.de", "ebay_user1", "password1" },
@@ -51,7 +59,7 @@ bool read_data_from_stdin(pw_store::data_type &date)
     std::cout << "User:\n";
     std::cin >> date.username;
 
-    const libaan::crypto::util::password_from_stdin password(2);
+    const libaan::crypto::util::password_from_stdin password(0);
     if(!password) {
         std::cerr << "Password Error. Too short?\n";
         return false;
@@ -151,17 +159,37 @@ bool add(const std::string &db_password)
     return true;
 }
 
-bool lookup(const std::string &db_password, const std::string &key)
+bool lookup(const std::string &db_password, const std::string &key,
+            const pw_store::data_type::id_type uid)
 {
     libaan::crypto::file::crypto_file file_io(CIPHER_DB);
     auto db = load_db(file_io, db_password);
     if(!db)
         return false;
 
-    std::list<pw_store::data_type> matches;
+    if(uid != decltype(uid)(-1)) {
+        pw_store::data_type data;
+        const auto ret = db->get(uid, data);
+        if(ret) {
+#ifndef NO_GOOD
+            if (!libaan::util::x11::add_to_clipboard(
+                    data.password, std::chrono::milliseconds(3000))) {
+                std::cerr << "Error accessing x11 clipboard.\n";
+                return false;
+            }
+
+            // TODO: x11_clipboard_copy
+            std::cout << uid << ": " << data << " -> copied to x11 clipboard.\n";
+#endif
+        }
+        return ret;
+    }
+
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+    matches;
     db->lookup(key, matches);
     for(const auto &match: matches)
-        std::cout << match << "\n";
+        std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
     return true;
 }
@@ -244,14 +272,16 @@ bool interactive_add(const std::string &db_password)
 }
 
 const std::string ui_help = "C-x k\n"
-                            "C-x C-k    clear lookup buffer.\n\n"
+                            "C-x C-k        clear lookup buffer.\n\n"
                             "C-x l\n"
-                            "C-x C-l    dump db\n\n"
+                            "C-x C-l        dump db\n\n"
+                            "C-x n\n"
+                            "C-x C-n <id>   retrieve datum <id>\n\n"
                             "C-x c\n"
-                            "C-x C-c    exit\n\n"
+                            "C-x C-c        exit\n\n"
                             "C-x h\n"
-                            "C-x C-h    show more help\n"
-                            "C-g        cancel any action\n\n";
+                            "C-x C-h        show more help\n"
+                            "C-g            cancel any action\n\n";
 const std::string ui_last_normal_prefix = "  (Normal)  key = \"";
 const std::string ui_last_normal_suffix = "\"\n";
 const std::string ui_last_cx_prefix = "  (C-x)  key = \"";
@@ -274,12 +304,6 @@ bool interactive_lookup(const std::string &db_password)
     if(!db)
         return false;
 
-    // TODO:
-    // iterate and wait for input until eof.
-    // perform partial lookup for entered characters.
-    // when lookup result is a single datum notify user and copy key(password)
-    // in x11 buffer
-
     //get user input async
     // TODO: select would be better, but 100ms cycletime works
     //       good enough for now and does not seem to have much
@@ -288,10 +312,21 @@ bool interactive_lookup(const std::string &db_password)
     std::string input;
     std::string last_lookup;
 
-    enum state_type { CTRL_X, NORMAL } state;
+#ifdef NO_GOOD
+    #define CTRL(x) (x)
+#endif
+
+    enum state_type {
+        CTRL_X,        // "command_mode": commands activated with Ctrl-x key
+                       // combinations
+        ACCUMULATE,    // "accumalation mode": all input is gathered in a
+                       // string. for now only used for x11 clipboard population.
+        NORMAL         // normal input mode
+    } state;
     state = NORMAL;
     bool show_help = false;
     bool dump_db = false;
+    std::string accumulate;
 
     while(true) {
         if(state == CTRL_X && SIGINT_CAUGHT) {
@@ -326,11 +361,45 @@ bool interactive_lookup(const std::string &db_password)
                     } else if(in == CTRL('l') || in == 'l') {
                         dump_db = true;
                         change = true;
+                    } else if(in == CTRL('n') || in == 'n') {
+                        state = ACCUMULATE;
+                        input.clear();
                     }
 
                     if(change)
                         state = NORMAL;
-                } else {
+                } else if(state == ACCUMULATE) {
+                    if (in == '\n') {
+                        pw_store::data_type::id_type id =
+                            std::strtol(accumulate.c_str(), nullptr, 10);
+                        pw_store::data_type date;
+                        if(db->get(id, date)) {
+                            std::cout << id << ": " << date << "\n";
+                            // TODO: x11_clipboard_copy
+#ifndef NO_GOOD
+                            if (!libaan::util::x11::add_to_clipboard(
+                                    date.password, std::chrono::milliseconds(3000))) {
+                                // std::cerr << "Error accessing x11 clipboard before timeout.\n";
+                            }
+
+                            // TODO: x11_clipboard_copy
+                            std::cout << id << ": " << date << " -> copied to x11 clipboard.\n";
+#endif
+                            // should be false at the moment
+                            // change = false;
+                        } else
+                            change = true;
+                        accumulate.clear();
+                        state = NORMAL;
+                    } else if(isgraph(in)) {
+                        accumulate.push_back(static_cast<char>(in));
+                        change = true;
+                    } else if(in == CTRL('g')) {
+                        change = true;
+                        state = NORMAL;
+                        accumulate.clear();
+                    } 
+                } else if(state == NORMAL) {
                     if(in == CTRL('x')) {
                         state = CTRL_X;
                         change = true;
@@ -348,36 +417,38 @@ bool interactive_lookup(const std::string &db_password)
                     }
                 }
             }
-                /*
-                    char c = static_cast<char>(tty_raw.getch());
-                    std::cout << "\tyes: " << c << "\n";
-                    if(c == 'q')
-                        return;
-                */
         }
         if(!change) {
+#ifdef NO_GOOD
+            usleep(dura.count() * 1000);
+#else
             std::this_thread::sleep_for(dura);
+#endif
             continue;
         }
 
         // handle input
-
         if(input.length()) {
             last_lookup.clear();
-            std::list<pw_store::data_type> matches;
+            std::list<std::tuple<pw_store::data_type::id_type,
+                                 pw_store::data_type>> matches;
             db->lookup(input, matches);
             for(const auto &match: matches)
-                last_lookup.append(match.to_string() + "\n");
-            // std::cout << "\t" << match << "\n";
-            // std::cout << "\n";
+                last_lookup.append(std::to_string(std::get<0>(match))
+                                   + std::get<1>(match).to_string() + "\n");
         }
 
         struct gui
         {
             gui(bool help, const state_type &state, const std::string &key,
-                const std::string &last_lookup, bool dump_db, const pw_store::database &db)
-                : help(help), state(state), key(key), last_lookup(last_lookup),
-                  dump_db(dump_db), db(db)
+                const std::string &last_lookup, bool dump_db,
+                const pw_store::database &db)
+                : help(help),
+                  state(state),
+                  key(key),
+                  last_lookup(last_lookup),
+                  dump_db(dump_db),
+                  db(db)
             {}
             ~gui()
             {
@@ -434,7 +505,7 @@ bool run(config_type config)
         ret = interactive_lookup(db_password);
         break;
     case config_type::LOOKUP:
-        ret = lookup(db_password, config.lookup_key);
+        ret = lookup(db_password, config.lookup_key, config.uid);
         break;
     }
 
@@ -446,6 +517,7 @@ void usage(int argc, char *argv[])
     std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n"
               << "  possible flags are:\n"
               << "    -i\tinteractive can be used with add or lookup\n"
+              << "    -n <uid>\tcan only be used with non-interactive lookup\n"
               << "  possible commands are:\n"
               << "    add\n"
               << "    dump\n"
@@ -462,21 +534,30 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+#ifndef NO_GOOD
     struct sigaction act;
     act.sa_handler = sigint_handler;
     sigemptyset(&act.sa_mask);
     act.sa_flags = 0;
     sigaction(SIGINT, &act, nullptr);
     //sigignore(SIGINT);
+#endif
 
-    // arguments
     config_type config;
     config.interactive = false;
+    config.uid = decltype(config.uid)(-1);
     // parse arguments
     for(int arg_index = 1; arg_index < argc; arg_index++) {
         if(argv[arg_index][0] == '-') {
             if(argv[arg_index][1] == 'i')
                 config.interactive = true;
+            if(argv[arg_index][1] == 'n') {
+                if(arg_index + 1 >= argc) {
+                    usage(argc, argv);
+                    exit(EXIT_FAILURE);
+                }
+                config.uid = std::strtoul(argv[++arg_index], nullptr, 10);
+            }
         } else { // commands
             if(!std::strcmp(argv[arg_index], "add"))
                 config.mode = config_type::ADD;
@@ -511,6 +592,20 @@ int main(int argc, char *argv[])
             usage(argc, argv);
             exit(EXIT_FAILURE);
         }
+    }
+
+    if(config.uid != decltype(config.uid)(-1)
+       && config.mode != config_type::LOOKUP) {
+        usage(argc, argv);
+        exit(EXIT_FAILURE);
+    }
+
+    // at least one must be set for lookup
+    if(config.mode != config_type::LOOKUP
+       && config.uid != decltype(config.uid)(-1)
+       && !config.lookup_key.length()) {
+        usage(argc, argv);
+        exit(EXIT_FAILURE);
     }
 
     if(!run(config))

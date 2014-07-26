@@ -21,6 +21,7 @@ namespace pw_store {
 
 struct data_type
 {
+    using id_type = std::size_t;
 /*
 Possibly provide hash as another key to ease lookup:
     libaan::crypto::hash h;
@@ -67,14 +68,24 @@ public:
     // Parse the provided buffer.
     bool parse();
     bool insert(const data_type &date);
-    void lookup(const std::string &key, std::list<data_type> &matches);
+    // lookup performs an iterative search over all keys and returns matches
+    // together with an unique id. This id is invalidated after add or delete
+    // operations.
+    void lookup(const std::string &key,
+                std::list<std::tuple<data_type::id_type, data_type> > &matches);
     void synchronize_buffer();
     void clear_all_buffers();
 
-//TODO:
-// lookup should return id_type == index in vector for every found match
-//modify(id_type id, const data_type &date);
-//delete(id_type id);
+    bool get(const data_type::id_type &id, data_type &date)
+    {
+        if(id >= urluserpw.size())
+            return false;
+        date = to_data_type(urluserpw[id]);
+        return true;
+    }
+
+    void remove(const data_type::id_type &id) {}
+    void replace(const data_type::id_type &id, const data_type &date) {}
 
     void dump_db() const;
 private:
@@ -111,6 +122,7 @@ private:
         }
     };
 
+    // TODO: why not just save it as data_type?
     data_type to_data_type(const tuple_type & t) const
     {
         return data_type(std::get<0>(t), std::get<1>(t), std::get<2>(t));

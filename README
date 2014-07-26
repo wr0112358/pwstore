@@ -4,22 +4,25 @@ Work in progress. Not usable yet. (add and lookup works, but retrieving
 the matching password does not.)
 
 
-Missing
-  lookup:
-    dump uid of matched data.
-    lookup by uid with:
-      ./pwstore -n <uid> lookup
-      or
-      ./pwstore -i lookup
-        -> C-x n <uid> <Enter>
+Missing/Bugs
+  o x11 clipboard algorithm
+    make it more user friendly. Can the opening window be suppressed?
+    windows equivalent?
+    provide option to copy first username, then after selection request the password.
 
-  integrate x11 clipboard algorithm (windows equivalent?)
-
-  integrate deps as submodules
-
-  gui:
+  o cli:
     disable echo
     select
+    remove need for additional keyboard input at start of interactive lookup after
+    password input.
+
+  o gui:
+    python/tk + boost python?
+    -> needs some refactoring
+
+  o windows:
+    crypto backend needs RNG. see comment.
+    interactive lookup not working yet.
 
 
 Usage
@@ -27,6 +30,13 @@ Usage
   ./pwstore add
   Or add some provided test data:
   ./pwstore init
+
+  Look at db contents/get uids:
+  ./pwstore dump
+  ./pwstore lookup <optional-string>
+
+  Extract a password:
+  ./pwstore lookup -n <uid>
 
   Interactive lookup:
   ./pwstore -i lookup

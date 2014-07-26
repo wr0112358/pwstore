@@ -1,5 +1,6 @@
 #include "pwstore.hh"
 
+#include <tuple>
 #include "libaan/string_util.hh"
 
 bool pw_store::database::parse()
@@ -44,10 +45,11 @@ bool pw_store::database::insert(const data_type &date)
 }
 
 void pw_store::database::lookup(const std::string &key,
-                                std::list<data_type> &matches)
+                                std::list<std::tuple<data_type::id_type, data_type> > &matches)
 {
     // Just do a linear search for now. The number of keys won't be that large.
     const auto &fail = std::string::npos;
+    data_type::id_type idx = 0;
     for (const auto &k : urluserpw) {
         const std::string &url = std::get<0>(k);
         const std::string &user = std::get<1>(k);
@@ -55,7 +57,7 @@ void pw_store::database::lookup(const std::string &key,
         const bool user_match = user.find(key) != fail;
 
         if (url_match || user_match)
-            matches.push_back(to_data_type(k));
+            matches.push_back(std::make_tuple(idx, to_data_type(k)));
 
 /*
         std::string debug_out = "key(\"" + key + "\") -> ";
@@ -67,6 +69,7 @@ void pw_store::database::lookup(const std::string &key,
             std::cout << debug_out << "\n";
 */
 
+        idx++;
     }
 }
 
@@ -102,6 +105,7 @@ void pw_store::database::clear_all_buffers()
 
 void pw_store::database::dump_db() const
 {
+    data_type::id_type idx = 0;
     for(const auto &key: urluserpw)
-        std::cout << "\t" << to_data_type(key) << "\n";
+        std::cout << "\t" << idx++ << ": " << to_data_type(key) << "\n";
 }
