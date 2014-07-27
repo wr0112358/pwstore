@@ -4,6 +4,7 @@ DEFINES=
 APP=pwstore
 
 INCLUDES=-I.deps/
+#INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc

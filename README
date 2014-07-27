@@ -1,12 +1,9 @@
 Password Storage With OpenSSL Backed Cryptography
 
-Work in progress. Not usable yet. (add and lookup works, but retrieving
-the matching password does not.)
-
+Work in progress.
 
 Missing/Bugs
   o x11 clipboard algorithm
-    make it more user friendly. Can the opening window be suppressed?
     windows equivalent?
     provide option to copy first username, then after selection request the password.
 
@@ -34,12 +31,13 @@ Usage
   Look at db contents/get uids:
   ./pwstore dump
   ./pwstore lookup <optional-string>
+  Or do an interactive lookup:
+  ./pwstore -i lookup
 
   Extract a password:
   ./pwstore lookup -n <uid>
-
-  Interactive lookup:
-  ./pwstore -i lookup
+  Or in interactive mode:
+  C-x n <uid>
 
   Interactive mode displays the supported keyboard shortcuts per default.
 

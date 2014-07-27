@@ -173,7 +173,7 @@ bool lookup(const std::string &db_password, const std::string &key,
         if(ret) {
 #ifndef NO_GOOD
             if (!libaan::util::x11::add_to_clipboard(
-                    data.password, std::chrono::milliseconds(3000))) {
+                    data.password, std::chrono::milliseconds(10000))) {
                 std::cerr << "Error accessing x11 clipboard.\n";
                 return false;
             }
@@ -378,7 +378,7 @@ bool interactive_lookup(const std::string &db_password)
                             // TODO: x11_clipboard_copy
 #ifndef NO_GOOD
                             if (!libaan::util::x11::add_to_clipboard(
-                                    date.password, std::chrono::milliseconds(3000))) {
+                                    date.password, std::chrono::milliseconds(10000))) {
                                 // std::cerr << "Error accessing x11 clipboard before timeout.\n";
                             }
 
