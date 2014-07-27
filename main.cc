@@ -246,47 +246,12 @@ bool init(const std::string &db_password)
     return true;
 }
 
-/*
-// Add saved pws from firefox profiles.
-bool firefox_add(const std::string &db_password)
-{
-
-// A: Extract it by reading the encrypted db
-    // 1. read "Path=.." lines from:
-    //    "~" + getpwuid(getuid)->pw_name + "/.mozilla/firefox/profiles.ini
-    //
-    // Relevant files:  “signons.sqlite” and "key3.db" for master-pw
-    // Analog to the following. But might need some updating:
-    // http://spiros-antonatos.blogspot.de/2011/07/cc-way-for-decrypting-firefox-passwords.html
-    // http://spiros-antonatos.blogspot.de/2011/07/cc-way-for-decrypting-firefox-passwords_07.html
-
-// B: Use cam_app ocr extractor to get ocr dump of firefox window..
-
-    using namespace libaan::crypto::file;
-    crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
-    if(!db)
-        return false;
-
-    // set content
-    for(const auto &date: test_data)
-        if(!db->insert(date)) {
-            std::cerr << "Error: inserting in database failed.\n";
-            return false;
-        }
-    if(!sync_and_write_db(db_password, file_io, *db))
-        return false;
-
-    return true;
-}
-*/
-
 bool interactive_add(const std::string &db_password)
 {
 // iterate and wait for input until eof.
 // read in data just like in add()
 // then ask for y/n to insert
-    return true;
+    return false;
 }
 
 const std::string ui_help = "C-x k\n"
@@ -345,6 +310,7 @@ bool interactive_lookup(const std::string &db_password)
     bool show_help = false;
     bool dump_db = false;
     std::string accumulate;
+    bool only_once = true;
 
     while(true) {
         if(state == CTRL_X && SIGINT_CAUGHT) {
@@ -354,6 +320,10 @@ bool interactive_lookup(const std::string &db_password)
         }
 
         bool change = false;
+        if(only_once) {
+            change = true;
+            only_once = false;
+        }
         {
             // TODO: move rawmode object out of the loop.
             //       -> ignoring signals necessary: see test1 in lib testsuite

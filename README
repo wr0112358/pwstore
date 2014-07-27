@@ -10,8 +10,6 @@ Missing/Bugs
   o cli:
     disable echo
     select
-    remove need for additional keyboard input at start of interactive lookup after
-    password input.
 
   o gui:
     python/tk + boost python?
