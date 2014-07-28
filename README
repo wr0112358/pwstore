@@ -3,13 +3,18 @@ Password Storage With OpenSSL Backed Cryptography
 Work in progress.
 
 Missing/Bugs
+  o general:
+    rethink data structure and uid.
+
   o x11 clipboard algorithm
     windows equivalent?
     provide option to copy first username, then after selection request the password.
 
   o cli:
-    disable echo
+    emacs style key bindings are not the best choice for usability..(except for emacs users)
+    disabling ECHO in termios settings has no effect
     select
+    alternate mode does not clear the screen correctly using ssh in cygwin terminal
 
   o gui:
     python/tk + boost python?
@@ -17,7 +22,7 @@ Missing/Bugs
 
   o windows:
     crypto backend needs RNG. see comment.
-    interactive lookup not working yet.
+    interactive lookup not working yet. port terminal_util.hh
 
 
 Usage
@@ -36,6 +41,11 @@ Usage
   ./pwstore lookup -n <uid>
   Or in interactive mode:
   C-x n <uid>
+
+  Remove a key:
+  ./pwstore remove -n 1
+  or multiple keys:
+  ./pwstore remove -n 1 -n 2
 
   Interactive mode displays the supported keyboard shortcuts per default.
 

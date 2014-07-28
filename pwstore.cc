@@ -19,6 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "pwstore.hh"
 
 #include <tuple>
+
 #include "libaan/string_util.hh"
 
 bool pw_store::database::parse()

@@ -16,12 +16,10 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-// run example with:
-// rm test_file.crypt test_file6decrypted; ./crypto_util_test_camellia password test_file6 test_file.crypt
-
 #include "pwstore.hh"
 
 #include <chrono>
+#include <libgen.h> // dirname basename
 #include <list>
 #include <signal.h>
 #include <thread>
@@ -37,16 +35,17 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 namespace {
 
 struct config_type {
-    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP } mode;
+    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP, REMOVE, PASSWD } mode;
     bool interactive;
     std::string lookup_key;
-    pw_store::data_type::id_type uid;
+    std::vector<pw_store::data_type::id_type> uids;
+    std::string db_file;
 };
 
 #ifndef NO_GOOD
-const auto CIPHER_DB = "/tmp/.pwstore.crypt";
+const std::string DEFAULT_CIPHER_DB = ".pwstore.crypt";
 #else
-const auto CIPHER_DB = ".pwstore.crypt";
+const std::string DEFAULT_CIPHER_DB = ".pwstore.crypt";
 #endif
 
 
@@ -87,55 +86,86 @@ bool read_data_from_stdin(pw_store::data_type &date)
     return true;
 }
 
-std::unique_ptr<pw_store::database>
-load_db(libaan::crypto::file::crypto_file &file_io,
-        const std::string &db_password)
+class encrypted_pwstore
 {
-    using namespace libaan::crypto::file;
-
-    // Read encrypted database with provided password.
-    crypto_file::error_type err = crypto_file::NO_ERROR;
-    err = file_io.read(db_password);
-    if(err != crypto_file::NO_ERROR) {
-        std::cerr << "Error deciphering database. Wrong key? ("
-                  << crypto_file::error_string(err) << ")\n";
-        return nullptr;
+public:
+    // open/create database in file db_file.
+    encrypted_pwstore(const std::string &db_file, const std::string &password)
+        : crypto_file(new libaan::crypto::file::crypto_file(db_file)),
+          password(password)
+    {
+        db = load_db();
     }
 
-    // The only reason for not using an automatic variable for db per function
-    // is to avoid duplicate code..
-    // Better to be replaced with a class.
-    std::unique_ptr<pw_store::database> db(
-        new pw_store::database(file_io.get_decrypted_buffer()));
-    if(!db->parse()) {
-        std::cerr << "Error: corrupt database file.\n";
-        return nullptr;
+    ~encrypted_pwstore()
+    {
+        std::fill(std::begin(password), std::end(password), 0);
     }
 
-    return db;
-}
+    // better check this before using get() method
+    operator bool() const { return db != 0; }
 
-bool sync_and_write_db(const std::string &db_password,
-                       libaan::crypto::file::crypto_file &file_io,
-                       pw_store::database &db)
-{
-    using namespace libaan::crypto::file;
-    db.synchronize_buffer();
-    const auto err = file_io.write(db_password);
-    if (err != crypto_file::NO_ERROR) {
-        std::cerr << "Writing database to disk failed. Error: "
-                  << crypto_file::error_string(err) << "\n";
-        return false;
+    // next call to sync will reencrypt the database with the new password
+    void change_password(const std::string &pw) { password.assign(pw); }
+
+    bool sync() { return sync_and_write_db(); }
+
+    pw_store::database &get() { return *db; }
+
+private:
+    bool sync_and_write_db()
+    {
+        if(!db || !crypto_file)
+            return false;
+        using namespace libaan::crypto::file;
+        db->synchronize_buffer();
+        const auto err = crypto_file->write(password);
+        if (err != crypto_file::NO_ERROR) {
+            std::cerr << "Writing database to disk failed. Error: "
+                      << crypto_file::error_string(err) << "\n";
+            return false;
+        }
+
+        return true;
     }
 
-    return true;
-}
+    std::unique_ptr<pw_store::database> load_db()
+    {
+        if(!crypto_file)
+            return nullptr;
 
-bool add(const std::string &db_password)
+        using namespace libaan::crypto::file;
+
+        // Read encrypted database with provided password.
+        auto err = crypto_file->read(password);
+        if(err != crypto_file::NO_ERROR) {
+            std::cerr << "Error deciphering database. Wrong key? ("
+                      << crypto_file::error_string(err) << ")\n";
+            return nullptr;
+        }
+
+        // The only reason for not using an automatic variable for db per function
+        // is to avoid duplicate code..
+        // Better to be replaced with a class.
+        std::unique_ptr<pw_store::database> db(
+            new pw_store::database(crypto_file->get_decrypted_buffer()));
+        if(!db->parse()) {
+            std::cerr << "Error: corrupt database file.\n";
+            return nullptr;
+        }
+
+        return db;
+    }
+
+private:
+    std::unique_ptr<libaan::crypto::file::crypto_file> crypto_file;
+    std::unique_ptr<pw_store::database> db;
+    std::string password;
+};
+
+bool add(const std::string &db_file, const std::string &db_password)
 {
-    using namespace libaan::crypto::file;
-    crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
+    encrypted_pwstore db(db_file, db_password);
     if(!db)
         return false;
 
@@ -144,50 +174,24 @@ bool add(const std::string &db_password)
         std::cerr << "Error reading data from stdin.\n";
         return false;
     }
-    if(!db->insert(date)) {
+    if(!db.get().insert(date)) {
         std::cerr << "Error: inserting in database failed.\n";
         return false;
     }
-    if(!sync_and_write_db(db_password, file_io, *db))
-        return false;
 
-    { // DEBUG: test crypto file by reading/decrypting the just written file
-        // make a copy of plaintext buffer
-        auto plain = file_io.get_decrypted_buffer();
-
-        // encryption and write successfull.
-        // Reading encrypted file again.
-
-        crypto_file file_io2(CIPHER_DB);
-        const auto err = file_io2.read(db_password);
-        if(err != crypto_file::NO_ERROR) {
-            std::cerr << "Error deciphering database, wrong key? ("
-                      << crypto_file::error_string(err) << ")\n";
-            return false;
-        }
-        if(file_io2.get_decrypted_buffer() != plain) {
-            std::cerr << "Error: plain != Decrypt(Encrypt(plain))\n";
-            return false;
-        }
-    } // Debug Success: plain == Decrypt(Encrypt(plain))
-
-    // Overwrite memory.
-    file_io.clear_buffers();
-
-    return true;
+    return db.sync();
 }
 
-bool lookup(const std::string &db_password, const std::string &key,
-            const pw_store::data_type::id_type uid)
+bool lookup(const std::string &db_file, const std::string &db_password,
+            const std::string &key, const pw_store::data_type::id_type uid)
 {
-    libaan::crypto::file::crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
+    encrypted_pwstore db(db_file, db_password);
     if(!db)
         return false;
 
     if(uid != decltype(uid)(-1)) {
         pw_store::data_type data;
-        const auto ret = db->get(uid, data);
+        const auto ret = db.get().get(uid, data);
         if(ret) {
 #ifndef NO_GOOD
             if (!libaan::util::x11::add_to_clipboard(
@@ -205,48 +209,81 @@ bool lookup(const std::string &db_password, const std::string &key,
 
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
     matches;
-    db->lookup(key, matches);
+    db.get().lookup(key, matches);
     for(const auto &match: matches)
         std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
     return true;
 }
 
-bool dump(const std::string &db_password)
+bool remove(const std::string &db_file, const std::string &db_password,
+            
+std::vector<pw_store::data_type::id_type> &uids)
 {
-    libaan::crypto::file::crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
+    encrypted_pwstore db(db_file, db_password);
+    if(!db)
+        return false;
+
+    if(uids.size() == 1) {
+        if(!db.get().remove(uids[0]))
+            return false;
+    } else if(uids.size() > 1) {
+        if(!db.get().remove(uids))
+            return false;
+    } else
+        return false;
+
+    return db.sync();
+}
+
+
+bool passwd(const std::string &db_file, const std::string &db_password)
+{
+    encrypted_pwstore db(db_file, db_password);
+    if(!db)
+        return false;
+
+    const libaan::crypto::util::password_from_stdin db_password_new(2);
+    if(!db_password_new) {
+        std::cerr << "Password Error. Too short?\n";
+        return false;
+    }
+
+    db.change_password(db_password_new);
+    return db.sync();
+}
+
+
+bool dump(const std::string &db_file, const std::string &db_password)
+{
+    encrypted_pwstore db(db_file, db_password);
     if(!db)
         return false;
 
     std::cout << "Database dump:\n";
-    db->dump_db();
+    db.get().dump_db();
 
     return true;
 }
 
 // Test pwstore with example data.
-bool init(const std::string &db_password)
+bool init(const std::string &db_file, const std::string &db_password)
 {
-    using namespace libaan::crypto::file;
-    crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
+    encrypted_pwstore db(db_file, db_password);
     if(!db)
         return false;
 
     // set content
     for(const auto &date: test_data)
-        if(!db->insert(date)) {
+        if(!db.get().insert(date)) {
             std::cerr << "Error: inserting in database failed.\n";
             return false;
         }
-    if(!sync_and_write_db(db_password, file_io, *db))
-        return false;
 
-    return true;
+    return db.sync();
 }
 
-bool interactive_add(const std::string &db_password)
+    bool interactive_add(const std::string &db_file, const std::string &db_password)
 {
 // iterate and wait for input until eof.
 // read in data just like in add()
@@ -270,7 +307,7 @@ const std::string ui_last_normal_suffix = "\"\n";
 const std::string ui_last_cx_prefix = "  (C-x)  key = \"";
 const std::string ui_last_cx_suffix = "\"\n";
 
-bool interactive_lookup(const std::string &db_password)
+bool interactive_lookup(const std::string &db_file, const std::string &db_password)
 {
     struct raii {
         raii() { libaan::util::terminal::alternate_screen_on(); }
@@ -282,8 +319,7 @@ bool interactive_lookup(const std::string &db_password)
         std::string print_after_terminal_reset;
     } raii;
 
-    libaan::crypto::file::crypto_file file_io(CIPHER_DB);
-    auto db = load_db(file_io, db_password);
+    encrypted_pwstore db(db_file, db_password);
     if(!db)
         return false;
 
@@ -361,7 +397,7 @@ bool interactive_lookup(const std::string &db_password)
                         pw_store::data_type::id_type id =
                             std::strtol(accumulate.c_str(), nullptr, 10);
                         pw_store::data_type date;
-                        if(db->get(id, date)) {
+                        if(db.get().get(id, date)) {
                             std::cout << id << ": " << date << "\n";
                             // TODO: x11_clipboard_copy
 #ifndef NO_GOOD
@@ -420,7 +456,7 @@ bool interactive_lookup(const std::string &db_password)
             last_lookup.clear();
             std::list<std::tuple<pw_store::data_type::id_type,
                                  pw_store::data_type>> matches;
-            db->lookup(input, matches);
+            db.get().lookup(input, matches);
             for(const auto &match: matches)
                 last_lookup.append(std::to_string(std::get<0>(match))
                                    + std::get<1>(match).to_string() + "\n");
@@ -462,10 +498,10 @@ bool interactive_lookup(const std::string &db_password)
             const std::string &last_lookup;
             bool dump_db;
             const pw_store::database &db;
-        } gui(show_help, state, input, last_lookup, dump_db, *db);
+        } gui(show_help, state, input, last_lookup, dump_db, db.get());
     }
 
-    return true;
+    return db.sync();
 }
 
 bool run(config_type config)
@@ -478,22 +514,30 @@ bool run(config_type config)
     bool ret = true;
     switch(config.mode) {
     case config_type::ADD:
-        ret = add(db_password);
+        ret = add(config.db_file, db_password);
         break;
     case config_type::DUMP:
-        ret = dump(db_password);
+        ret = dump(config.db_file, db_password);
         break;
     case config_type::INIT:
-        ret = init(db_password);
+        ret = init(config.db_file, db_password);
         break;
     case config_type::INTERACTIVE_ADD:
-        ret = interactive_add(db_password);
+        ret = interactive_add(config.db_file, db_password);
         break;
     case config_type::INTERACTIVE_LOOKUP:
-        ret = interactive_lookup(db_password);
+        ret = interactive_lookup(config.db_file, db_password);
         break;
     case config_type::LOOKUP:
-        ret = lookup(db_password, config.lookup_key, config.uid);
+        ret = lookup(config.db_file, db_password, config.lookup_key,
+                     config.uids.size() ? config.uids.front()
+                                        : pw_store::data_type::id_type(-1));
+        break;
+    case config_type::REMOVE:
+        ret = remove(config.db_file, db_password, config.uids);
+        break;
+    case config_type::PASSWD:
+        ret = passwd(config.db_file, db_password);
         break;
     }
 
@@ -504,15 +548,77 @@ void usage(int argc, char *argv[])
 {
     std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n"
               << "  possible flags are:\n"
+              << "    -f <filename>\tuse this file as database\n"
               << "    -i\tinteractive can be used with add or lookup\n"
-              << "    -n <uid>\tcan only be used with non-interactive lookup\n"
+              << "    -n <uid>  can only be used with non-interactive lookup/remove\n"
+              << "              multiple uids can be specified for remove\n"
               << "  possible commands are:\n"
               << "    add\n"
               << "    dump\n"
               << "    lookup\n"
+              << "    remove\n"
+              << "    passwd  change password and reencrypt db-file\n"
               << "  optional-key:\n"
               << "    used only for lookup command in non-interactive mode.\n";
 }
+
+
+#ifndef NO_GOOD
+    struct pathsep
+    {
+        bool operator()(char ch) const { return ch == '/'; }
+    };
+#else
+    struct patsep
+    {
+        bool operator()(char ch) const { return ch == '\\' || ch == '/'; }
+    };
+#endif
+std::string dirname(std::string const &pathname)
+{
+    return std::string(
+        pathname.begin(),
+        std::find_if(pathname.rbegin(), pathname.rend(), pathsep()).base());
+}
+
+std::string basename(std::string const &pathname)
+{
+    return std::string(
+        std::find_if(pathname.rbegin(), pathname.rend(), pathsep()).base(),
+        pathname.end());
+}
+
+bool backup_db(const std::string &db_file)
+{
+    std::string buff;
+    if(!libaan::util::file::read_file(db_file.c_str(), buff))
+        return false;
+
+    const auto now = std::chrono::high_resolution_clock::now();
+    std::size_t count_backup_files = 0;
+
+    const std::string BACKUP_FILE_PREFIX = db_file + "_backup_";
+    const std::string base(basename(BACKUP_FILE_PREFIX));
+    const auto dir = dirname(db_file);
+
+    auto const lambda = [&base, &count_backup_files](const std::string &path, const struct dirent *p) {
+        const std::string entry(p->d_name);
+        if(!std::equal(base.begin(), base.end(), entry.begin()))
+            return;
+        count_backup_files++;
+    };
+
+    libaan::util::file::dir::readdir(dir, lambda);
+
+    const auto backup_file = BACKUP_FILE_PREFIX + libaan::util::to_string(now);
+    if(!libaan::util::file::write_file(backup_file.c_str(), buff))
+        return false;
+
+    std::cerr << "Creating backup(\"" << backup_file << "\") of file(\"" << db_file << "\")\n";
+    std::cerr << "backup_files: " << count_backup_files << "\n";
+    return true;
+}
+
 }
 
 int main(int argc, char *argv[])
@@ -533,18 +639,24 @@ int main(int argc, char *argv[])
 
     config_type config;
     config.interactive = false;
-    config.uid = decltype(config.uid)(-1);
     // parse arguments
     for(int arg_index = 1; arg_index < argc; arg_index++) {
         if(argv[arg_index][0] == '-') {
             if(argv[arg_index][1] == 'i')
                 config.interactive = true;
-            if(argv[arg_index][1] == 'n') {
+            else if(argv[arg_index][1] == 'n') {
                 if(arg_index + 1 >= argc) {
                     usage(argc, argv);
                     exit(EXIT_FAILURE);
                 }
-                config.uid = std::strtoul(argv[++arg_index], nullptr, 10);
+                const auto uid_arg = argv[++arg_index];
+                config.uids.push_back(std::strtoul(uid_arg, nullptr, 10));
+            } else if(argv[arg_index][1] == 'f') {
+                if(arg_index + 1 >= argc) {
+                    usage(argc, argv);
+                    exit(EXIT_FAILURE);
+                }
+                config.db_file = std::string(argv[++arg_index]);
             }
         } else { // commands
             if(!std::strcmp(argv[arg_index], "add"))
@@ -555,6 +667,10 @@ int main(int argc, char *argv[])
                 config.mode = config_type::INIT;
             else if(!std::strcmp(argv[arg_index], "lookup"))
                 config.mode = config_type::LOOKUP;
+            else if(!std::strcmp(argv[arg_index], "remove"))
+                config.mode = config_type::REMOVE;
+            else if(!std::strcmp(argv[arg_index], "passwd"))
+                config.mode = config_type::PASSWD;
             else
                 config.lookup_key.assign(argv[arg_index]);
         }
@@ -582,18 +698,53 @@ int main(int argc, char *argv[])
         }
     }
 
-    if(config.uid != decltype(config.uid)(-1)
-       && config.mode != config_type::LOOKUP) {
+    if(config.uids.size()
+       && config.mode != config_type::LOOKUP
+       && config.mode != config_type::REMOVE) {
         usage(argc, argv);
         exit(EXIT_FAILURE);
     }
 
     // at least one must be set for lookup
-    if(config.mode != config_type::LOOKUP
-       && config.uid != decltype(config.uid)(-1)
+    if(config.mode == config_type::LOOKUP
+       && !config.uids.size()
        && !config.lookup_key.length()) {
         usage(argc, argv);
         exit(EXIT_FAILURE);
+    }
+
+    if(config.mode == config_type::REMOVE
+       && !config.uids.size()) {
+        usage(argc, argv);
+        exit(EXIT_FAILURE);
+    }
+
+    if(config.mode == config_type::PASSWD
+       && (config.uids.size()
+
+           || config.lookup_key.length())) {
+        usage(argc, argv);
+        exit(EXIT_FAILURE);
+    }
+
+
+    if(!config.db_file.length())
+        config.db_file = DEFAULT_CIPHER_DB;
+
+    // create a backup file before applying any modifying commands.
+    switch(config.mode) {
+    case config_type::DUMP:
+    case config_type::INTERACTIVE_LOOKUP:
+    case config_type::LOOKUP:
+        break;
+    case config_type::ADD:
+    case config_type::INIT:
+    case config_type::INTERACTIVE_ADD:
+    case config_type::REMOVE:
+    case config_type::PASSWD:
+    default:
+        if(!backup_db(config.db_file))
+            std::cerr << "Could not create database backup. Better be careful.\n";
     }
 
     if(!run(config))

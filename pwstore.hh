@@ -79,8 +79,16 @@ public:
 
 public:
     // Create database object from string buffer. No copying involved.
-    database(std::string &buffer)
+    explicit database(std::string &buffer)
         : dirty(false), string_buffer(buffer) {}
+/*
+    explicit database(const database &other)
+        : dirty(other.dirty),
+          string_buffer(other.string_buffer),
+          line_count(other.line_count),
+          urluserpw(other.urluserpw)
+    {}
+*/
 
     ~database() { clear_all_buffers(); }
     // Parse the provided buffer.
@@ -102,8 +110,34 @@ public:
         return true;
     }
 
-    void remove(const data_type::id_type &id) {}
-    void replace(const data_type::id_type &id, const data_type &date) {}
+    bool remove(std::vector<data_type::id_type> &ids)
+    {
+        if(!ids.size())
+            return true;
+        if(!urluserpw.size())
+            return false;
+        std::sort(std::begin(ids), std::end(ids));
+        if(ids.back() >= urluserpw.size())
+            return false;
+
+        // delete multiple elements, starting with highest index,
+        // so the iterators stay valid.
+        for(std::size_t i = ids.size() - 1;;) {
+            urluserpw.erase(std::begin(urluserpw) + ids[i]);
+            if(i == 0)
+                break;
+            i--;
+        }
+        return true;
+    }
+
+    bool remove(const data_type::id_type &id)
+    {
+        if (id >= urluserpw.size())
+            return false;
+        urluserpw.erase(std::begin(urluserpw) + id);
+        return true;
+    }
 
     void dump_db() const;
 private:
@@ -144,6 +178,11 @@ private:
     data_type to_data_type(const tuple_type & t) const
     {
         return data_type(std::get<0>(t), std::get<1>(t), std::get<2>(t));
+    }
+
+    tuple_type to_tuple_type(const data_type & date) const
+    {
+        return std::make_tuple(date.url_string, date.username, date.password);
     }
 
 private:
