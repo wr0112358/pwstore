@@ -2,4 +2,4 @@ test/
 *.o
 pwstore
 pwstore.exe
-
+.pwstore*

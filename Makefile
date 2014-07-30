@@ -3,8 +3,10 @@ CXX_FLAGS=-std=c++11 -g -Wall -Werror
 DEFINES=
 APP=pwstore
 
-#INCLUDES=-I.deps/
-INCLUDES=-I..
+INSTALL_DIR=/opt/usr/bin/
+
+INCLUDES=-I.deps/
+#INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc
@@ -21,6 +23,10 @@ pwstore: $(objects_pwstore)
 
 clean :
 	rm -f *.o pwstore pwstore.exe
+
+install:
+	cp pwstore $(INSTALL_DIR)
+
 
 win64: CXX=x86_64-w64-mingw32-g++
 win64: DEFINES=-DNO_GOOD $(MINGW_DEFINES)
