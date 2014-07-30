@@ -19,7 +19,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "pwstore.hh"
 
 #include <chrono>
-#include <libgen.h> // dirname basename
+#include <functional>
+//#include <libgen.h> // dirname basename
 #include <list>
 #include <signal.h>
 #include <thread>
@@ -40,6 +41,7 @@ struct config_type {
     std::string lookup_key;
     std::vector<pw_store::data_type::id_type> uids;
     std::string db_file;
+    std::function<bool(const std::string &)> provide_value_to_user;
 };
 
 #ifndef NO_GOOD
@@ -52,11 +54,8 @@ const std::string DEFAULT_CIPHER_DB = ".pwstore.crypt";
 bool SIGINT_CAUGHT = false;
 void sigint_handler(int signum)
 {
-    std::cout << "signum = " << signum << "\n";
-    if (signum == SIGINT) {
-        std::cout << "signum = " << signum << "\n";
+    if (signum == SIGINT)
         SIGINT_CAUGHT = true;
-    }
 }
 
 
@@ -337,20 +336,17 @@ bool init(const std::string &db_file, const std::string &db_password)
     return false;
 }
 
-const std::string ui_help = "C-x k\n"
-                            "C-x C-k        clear lookup buffer.\n\n"
-                            "C-x l\n"
-                            "C-x C-l        dump db\n\n"
-                            "C-x n\n"
-                            "C-x C-n <id>   retrieve datum <id>\n\n"
-                            "C-x c\n"
-                            "C-x C-c        exit\n\n"
-                            "C-x h\n"
-                            "C-x C-h        show more help\n"
-                            "C-g            cancel any action\n\n";
-const std::string ui_last_normal_prefix = "  (Normal)  key = \"";
+const std::string ui_help =
+    "<Enter>        start command mode.\n"
+    "k              kill input.\n"
+    "l              dump db\n"
+    "<id><Enter>    retrieve password for key <id>. where id can be any digits\n"
+    "q              exit\n"
+    "h              show more help\n"
+    "Ctrl+g       cancel any action\n";
+const std::string ui_last_normal_prefix = "  (Normal)      key = \"";
 const std::string ui_last_normal_suffix = "\"\n";
-const std::string ui_last_cx_prefix = "  (C-x)  key = \"";
+const std::string ui_last_cx_prefix = "  (Command)      key = \"";
 const std::string ui_last_cx_suffix = "\"\n";
 
 bool interactive_lookup(const std::string &db_file, const std::string &db_password)
@@ -377,12 +373,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
     std::string input;
     std::string last_lookup;
 
-#ifdef NO_GOOD
-    #define CTRL(x) (x)
-#endif
-
     enum state_type {
-        CTRL_X,        // "command_mode": commands activated with Ctrl-x key
+        COMMAND,        // "command_mode": commands activated with Ctrl-x key
                        // combinations
         ACCUMULATE,    // "accumalation mode": all input is gathered in a
                        // string. for now only used for x11 clipboard population.
@@ -393,9 +385,10 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
     bool dump_db = false;
     std::string accumulate;
     bool only_once = true;
+    bool terminate = false;
 
     while(true) {
-        if(state == CTRL_X && SIGINT_CAUGHT) {
+        if(terminate || (state == COMMAND && SIGINT_CAUGHT)) {
             raii.print_after_terminal_reset.assign("Terminating by request.\n");
             SIGINT_CAUGHT = false;
             return true;
@@ -410,28 +403,28 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
             // TODO: move rawmode object out of the loop.
             //       -> ignoring signals necessary: see test1 in lib testsuite
             libaan::util::rawmode tty_raw;
-            while (tty_raw.kbhit()) {
+            while (tty_raw.kbhit() && !terminate) {
                 bool ignore = true;
                 const auto in = tty_raw.getch();
 
-                if(state == CTRL_X) {
-                    if(in == CTRL('c') || in == 'c') {
-                        raii.print_after_terminal_reset.assign("Terminating by request.\n");
-                        return true;
-                    } else if(in == CTRL('k') || in == 'k') {
+                if(state == COMMAND) {
+                    if(in == 'q') {
+                        terminate = true;
+                        break;
+                    } else if(in == 'k') {
                         change = true;
                         input.clear();
                     } else if(in == CTRL('g')) {
                         change = true;
                         show_help = false;
                         dump_db = false;
-                    } else if(in == CTRL('h') || in == 'h') {
+                    } else if(in == 'h') {
                         show_help = true;
                         change = true;
-                    } else if(in == CTRL('l') || in == 'l') {
+                    } else if(in == 'l') {
                         dump_db = true;
                         change = true;
-                    } else if(in == CTRL('n') || in == 'n') {
+                    } else if(isdigit(in)) {
                         state = ACCUMULATE;
                         input.clear();
                     }
@@ -454,7 +447,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                             change = true;
                         accumulate.clear();
                         state = NORMAL;
-                    } else if(isgraph(in)) {
+                        //} else if(isgraph(in)) {
+                    } else if(isdigit(in)) {
                         accumulate.push_back(static_cast<char>(in));
                         change = true;
                     } else if(in == CTRL('g')) {
@@ -463,8 +457,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                         accumulate.clear();
                     } 
                 } else if(state == NORMAL) {
-                    if(in == CTRL('x')) {
-                        state = CTRL_X;
+                    if(in == '\n') {
+                        state = COMMAND;
                         change = true;
                     } else if(isgraph(in)) //isalnum(in))
                         ignore = false;
@@ -520,14 +514,15 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                 std::cout << ui_help << SEP;
                 if(help)
                     std::cout << ""
-                              << "C-x means: Press x-key while holding down Ctrl.\n" << SEP;
-                std::cout << last_lookup << "\n";
-                if(state == CTRL_X)
+                              << "C-x means: Press x-key while holding down Ctrl.\n"
+                              << SEP;
+                if(state == COMMAND)
                     std::cout << ui_last_cx_prefix << key << ui_last_cx_suffix;
                 else if(state == NORMAL)
                     std::cout << ui_last_normal_prefix << key
                               << ui_last_normal_suffix;
                 std::cout << SEP;
+                std::cout << last_lookup << (last_lookup.length() ? SEP : "");
                 if(dump_db)
                     db.dump_db();
             }

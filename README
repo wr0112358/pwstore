@@ -13,30 +13,22 @@ Missing/Bugs
     What todo in a ssh session?
 
   o cli:
-    Emacs style key bindings are not the best choice for usability..(except
-    for emacs users).
-    -> per default in filter mode
-    -> enter command mode with: <ENTER>
-       in command mode use same bindings as now, but without CTRL-modifier
-
     Disabling ECHO in termios settings has no effect.
     select instead of busy wait.
 
     Alternate mode does not clear the screen correctly using ssh in cygwin
     terminal.
 
-  o gui:
+  o point&click gui:
     python/tk + boost python?
     -> needs some refactoring
+    display all entries per dflt
+    filter entries with partial string search on user input
+    select entry with double click -> copy pw in copypaste-buffer
 
   o windows:
     crypto backend needs RNG. see comment.
     interactive lookup not working yet. port terminal_util.hh
-
-  o micha wants a point&click gui
-    display all entries per dflt
-    filter entries with partial string search on user input
-    select entry with double click -> copy pw in copypaste-buffer
 
 Usage
   Add some data:
