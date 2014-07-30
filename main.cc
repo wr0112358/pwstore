@@ -68,21 +68,6 @@ std::list<pw_store::data_type> test_data = {
     {"mail.google.de", "gm_user3", "pw6" },
 };
 
-bool provide_value_to_user(const std::string &passwd)
-{
-#ifndef NO_GOOD
-    if (!libaan::util::x11::add_to_clipboard(
-            passwd, std::chrono::milliseconds(10000))) {
-        std::cerr << "Error accessing x11 clipboard.\n";
-        return false;
-    }
-    return true;
-#else
-    return false;
-#endif
-
-}
-
 bool read_data_from_stdin(pw_store::data_type &date)
 {
     std::cout << "Url:\n";
@@ -177,9 +162,9 @@ private:
     std::string password;
 };
 
-bool add(const std::string &db_file, const std::string &db_password)
+bool add(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -196,45 +181,43 @@ bool add(const std::string &db_file, const std::string &db_password)
     return db.sync();
 }
 
-bool lookup(const std::string &db_file, const std::string &db_password,
-            const std::string &key, const pw_store::data_type::id_type uid)
+bool lookup(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
-    if(uid != decltype(uid)(-1)) {
+    if(config.uids.size()) {
         pw_store::data_type data;
-        const auto ret = db.get().get(uid, data);
+        const auto ret = db.get().get(config.uids.front(), data);
         if(ret) {
-            if(!provide_value_to_user(data.password))
+            if(!config.provide_value_to_user(data.password))
                 return false;
         }
         return ret;
     }
 
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
-    matches;
-    db.get().lookup(key, matches);
+        matches;
+    db.get().lookup(config.lookup_key, matches);
     for(const auto &match: matches)
         std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
     return true;
 }
 
-bool remove(const std::string &db_file, const std::string &db_password,
-            
-std::vector<pw_store::data_type::id_type> &uids)
+// needs non-const config_type since remove sorts the uid vector
+bool remove(config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
-    if(uids.size() == 1) {
-        if(!db.get().remove(uids[0]))
+    if(config.uids.size() == 1) {
+        if(!db.get().remove(config.uids.front()))
             return false;
-    } else if(uids.size() > 1) {
-        if(!db.get().remove(uids))
+    } else if(config.uids.size() > 1) {
+        if(!db.get().remove(config.uids))
             return false;
     } else
         return false;
@@ -242,9 +225,9 @@ std::vector<pw_store::data_type::id_type> &uids)
     return db.sync();
 }
 
-bool change_passwd(const std::string &db_file, const std::string &db_password)
+bool change_passwd(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -258,9 +241,9 @@ bool change_passwd(const std::string &db_file, const std::string &db_password)
     return db.sync();
 }
 
-bool gen_passwd(const std::string &db_file, const std::string &db_password)
+bool gen_passwd(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -292,16 +275,16 @@ bool gen_passwd(const std::string &db_file, const std::string &db_password)
     }
 
     std::cout << "Created and stored key for: " << date << ".\n";
-    if(!provide_value_to_user(date.password))
+    if(!config.provide_value_to_user(date.password))
         return false;
     std::cout << date << " -> copied to x11 clipboard.\n";
 
     return db.sync();
 }
 
-bool dump(const std::string &db_file, const std::string &db_password)
+bool dump(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -312,9 +295,9 @@ bool dump(const std::string &db_file, const std::string &db_password)
 }
 
 // Test pwstore with example data.
-bool init(const std::string &db_file, const std::string &db_password)
+bool init(const config_type &config, const std::string &db_password)
 {
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -328,7 +311,7 @@ bool init(const std::string &db_file, const std::string &db_password)
     return db.sync();
 }
 
-    bool interactive_add(const std::string &db_file, const std::string &db_password)
+bool interactive_add(const config_type &config, const std::string &db_password)
 {
 // iterate and wait for input until eof.
 // read in data just like in add()
@@ -346,10 +329,12 @@ const std::string ui_help =
     "Ctrl+g       cancel any action\n";
 const std::string ui_last_normal_prefix = "  (Normal)      key = \"";
 const std::string ui_last_normal_suffix = "\"\n";
-const std::string ui_last_cx_prefix = "  (Command)      key = \"";
-const std::string ui_last_cx_suffix = "\"\n";
+const std::string ui_last_command_prefix = "  (Command)      key = \"";
+const std::string ui_last_command_suffix = "\"\n";
+const std::string ui_last_accumulate_prefix = "  (Command)       id = \"";
+const std::string ui_last_accumulate_suffix = "\"\n";
 
-bool interactive_lookup(const std::string &db_file, const std::string &db_password)
+bool interactive_lookup(const config_type &config, const std::string &db_password)
 {
     struct raii {
         raii() { libaan::util::terminal::alternate_screen_on(); }
@@ -361,7 +346,7 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
         std::string print_after_terminal_reset;
     } raii;
 
-    encrypted_pwstore db(db_file, db_password);
+    encrypted_pwstore db(config.db_file, db_password);
     if(!db)
         return false;
 
@@ -427,9 +412,13 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                     } else if(isdigit(in)) {
                         state = ACCUMULATE;
                         input.clear();
-                    }
+                        // don't forget this number
+                        accumulate.push_back(static_cast<char>(in));
+                        change = true;
+                    } else if(in == CTRL('x'))
+                        terminate = true;
 
-                    if(change)
+                    if(change && state != ACCUMULATE)
                         state = NORMAL;
                 } else if(state == ACCUMULATE) {
                     if (in == '\n') {
@@ -437,10 +426,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                             std::strtol(accumulate.c_str(), nullptr, 10);
                         pw_store::data_type date;
                         if(db.get().get(id, date)) {
-                            std::cout << id << ": " << date << "\n";
-                            if(provide_value_to_user(date.password))
-                                std::cout << id << ": " << date
-                                          << " -> copied to x11 clipboard.\n";
+                            if(config.provide_value_to_user(date.password))
+                                std::cout << "Retrieved value for <id> " << id << ".\n";
                             // should be false at the moment
                             // change = false;
                         } else
@@ -455,7 +442,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                         change = true;
                         state = NORMAL;
                         accumulate.clear();
-                    } 
+                    } else if(in == CTRL('x'))
+                        terminate = true;
                 } else if(state == NORMAL) {
                     if(in == '\n') {
                         state = COMMAND;
@@ -466,7 +454,8 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                         change = true;
                         show_help = false;
                         dump_db = false;
-                    } 
+                    } else if(in == CTRL('x'))
+                        terminate = true;
 
                     if(!ignore) {
                         input.push_back(static_cast<char>(in));
@@ -498,12 +487,13 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
         struct gui
         {
             gui(bool help, const state_type &state, const std::string &key,
-                const std::string &last_lookup, bool dump_db,
-                const pw_store::database &db)
+                const std::string &last_lookup, const std::string &accumulate,
+                bool dump_db, const pw_store::database &db)
                 : help(help),
                   state(state),
                   key(key),
                   last_lookup(last_lookup),
+                  accumulate(accumulate),
                   dump_db(dump_db),
                   db(db)
             {}
@@ -517,10 +507,12 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                               << "C-x means: Press x-key while holding down Ctrl.\n"
                               << SEP;
                 if(state == COMMAND)
-                    std::cout << ui_last_cx_prefix << key << ui_last_cx_suffix;
+                    std::cout << ui_last_command_prefix << key << ui_last_command_suffix;
                 else if(state == NORMAL)
                     std::cout << ui_last_normal_prefix << key
                               << ui_last_normal_suffix;
+                else if(state == ACCUMULATE)
+                    std::cout << ui_last_accumulate_prefix << accumulate << ui_last_accumulate_suffix;
                 std::cout << SEP;
                 std::cout << last_lookup << (last_lookup.length() ? SEP : "");
                 if(dump_db)
@@ -530,9 +522,11 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
             const state_type &state;
             const std::string &key;
             const std::string &last_lookup;
+            const std::string &accumulate;
             bool dump_db;
             const pw_store::database &db;
-        } gui(show_help, state, input, last_lookup, dump_db, db.get());
+        } gui(show_help, state, input, last_lookup, accumulate, dump_db,
+              db.get());
     }
 
     return db.sync();
@@ -548,33 +542,31 @@ bool run(config_type config)
     bool ret = true;
     switch(config.mode) {
     case config_type::ADD:
-        ret = add(config.db_file, db_password);
+        ret = add(config, db_password);
         break;
     case config_type::DUMP:
-        ret = dump(config.db_file, db_password);
+        ret = dump(config, db_password);
         break;
     case config_type::INIT:
-        ret = init(config.db_file, db_password);
+        ret = init(config, db_password);
         break;
     case config_type::INTERACTIVE_ADD:
-        ret = interactive_add(config.db_file, db_password);
+        ret = interactive_add(config, db_password);
         break;
     case config_type::INTERACTIVE_LOOKUP:
-        ret = interactive_lookup(config.db_file, db_password);
+        ret = interactive_lookup(config, db_password);
         break;
     case config_type::LOOKUP:
-        ret = lookup(config.db_file, db_password, config.lookup_key,
-                     config.uids.size() ? config.uids.front()
-                                        : pw_store::data_type::id_type(-1));
+        ret = lookup(config, db_password);
         break;
     case config_type::REMOVE:
-        ret = remove(config.db_file, db_password, config.uids);
+        ret = remove(config, db_password);
         break;
     case config_type::CHANGE_PASSWD:
-        ret = change_passwd(config.db_file, db_password);
+        ret = change_passwd(config, db_password);
         break;
     case config_type::GEN_PASSWD:
-        ret = gen_passwd(config.db_file, db_password);
+        ret = gen_passwd(config, db_password);
         break;
     }
 
@@ -585,10 +577,11 @@ void usage(int argc, char *argv[])
 {
     std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n"
               << "  possible flags are:\n"
-              << "    -f <filename>\tuse this file as database\n"
-              << "    -i\tinteractive can be used with add or lookup\n"
-              << "    -n <uid>  can only be used with non-interactive lookup/remove\n"
-              << "              multiple uids can be specified for remove\n"
+              << "    -f <db-file>  use this file as database\n"
+              << "    -i            interactive can be used with add or lookup\n"
+              << "    -n <uid>      can only be used with non-interactive lookup/remove\n"
+              << "                  multiple uids can be specified for remove\n"
+              << "    -o            dump retrieved password to stdout\n"
               << "  possible commands are:\n"
               << "    add\n"
               << "    dump\n"
@@ -639,7 +632,8 @@ bool backup_db(const std::string &db_file)
     const std::string base(basename(BACKUP_FILE_PREFIX));
     const auto dir = dirname(db_file);
 
-    auto const lambda = [&base, &count_backup_files](const std::string &path, const struct dirent *p) {
+    auto const lambda = [&base, &count_backup_files](const std::string &path,
+                                                     const struct dirent *p) {
         const std::string entry(p->d_name);
         if(!std::equal(base.begin(), base.end(), entry.begin()))
             return;
@@ -652,14 +646,18 @@ bool backup_db(const std::string &db_file)
     if(!libaan::util::file::write_file(backup_file.c_str(), buff))
         return false;
 
-    std::cerr << "Creating backup(\"" << backup_file << "\") of file(\"" << db_file << "\")\n";
-    std::cerr << "backup_files: " << count_backup_files << "\n";
+    std::cerr << "Creating backup(\"" << backup_file << "\") of file(\""
+              << db_file << "\")\n"
+              << "backup_files: " << count_backup_files << "\n";
     return true;
 }
 
 bool parse_and_check_args(int argc, char *argv[], config_type &config)
 {
     config.interactive = false;
+    enum output_type { TO_X11, TO_STDOUT } output;
+    output = TO_X11;
+
     // parse arguments
     for (int arg_index = 1; arg_index < argc; arg_index++) {
         if (argv[arg_index][0] == '-') {
@@ -674,7 +672,8 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                 if (arg_index + 1 >= argc)
                     return false;
                 config.db_file = std::string(argv[++arg_index]);
-            }
+            } else if (argv[arg_index][1] == 'o')
+                output = TO_STDOUT;
         } else {    // commands
             if (!std::strcmp(argv[arg_index], "add"))
                 config.mode = config_type::ADD;
@@ -745,6 +744,26 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
 
     if (!config.db_file.length())
         config.db_file = DEFAULT_CIPHER_DB;
+
+    if(output == TO_X11) {
+#ifndef NO_GOOD
+        config.provide_value_to_user = [](const std::string &passwd) {
+            if (!libaan::util::x11::add_to_clipboard(
+                    passwd, std::chrono::milliseconds(10000))) {
+                std::cerr << "Error accessing x11 clipboard.\n";
+                return false;
+            }
+            return true;
+        };
+#else
+        return false;
+#endif
+    } else if(output == TO_STDOUT) {
+        config.provide_value_to_user = [](const std::string &passwd) {
+            std::cout << passwd << "\n";
+            return true;
+        };
+    }
 
     return true;
 }
