@@ -3,8 +3,8 @@ CXX_FLAGS=-std=c++11 -g -Wall -Werror
 DEFINES=
 APP=pwstore
 
-INCLUDES=-I.deps/
-#INCLUDES=-I..
+#INCLUDES=-I.deps/
+INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc

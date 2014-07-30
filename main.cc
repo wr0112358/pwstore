@@ -35,7 +35,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 namespace {
 
 struct config_type {
-    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP, REMOVE, PASSWD } mode;
+    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP, REMOVE, CHANGE_PASSWD, GEN_PASSWD } mode;
     bool interactive;
     std::string lookup_key;
     std::vector<pw_store::data_type::id_type> uids;
@@ -69,12 +69,27 @@ std::list<pw_store::data_type> test_data = {
     {"mail.google.de", "gm_user3", "pw6" },
 };
 
+bool provide_value_to_user(const std::string &passwd)
+{
+#ifndef NO_GOOD
+    if (!libaan::util::x11::add_to_clipboard(
+            passwd, std::chrono::milliseconds(10000))) {
+        std::cerr << "Error accessing x11 clipboard.\n";
+        return false;
+    }
+    return true;
+#else
+    return false;
+#endif
+
+}
+
 bool read_data_from_stdin(pw_store::data_type &date)
 {
     std::cout << "Url:\n";
-    std::cin >> date.url_string;
+    std::getline(std::cin, date.url_string);
     std::cout << "User:\n";
-    std::cin >> date.username;
+    std::getline(std::cin, date.username);
 
     const libaan::crypto::util::password_from_stdin password(0);
     if(!password) {
@@ -193,16 +208,8 @@ bool lookup(const std::string &db_file, const std::string &db_password,
         pw_store::data_type data;
         const auto ret = db.get().get(uid, data);
         if(ret) {
-#ifndef NO_GOOD
-            if (!libaan::util::x11::add_to_clipboard(
-                    data.password, std::chrono::milliseconds(10000))) {
-                std::cerr << "Error accessing x11 clipboard.\n";
+            if(!provide_value_to_user(data.password))
                 return false;
-            }
-
-            // TODO: x11_clipboard_copy
-            std::cout << uid << ": " << data << " -> copied to x11 clipboard.\n";
-#endif
         }
         return ret;
     }
@@ -236,8 +243,7 @@ std::vector<pw_store::data_type::id_type> &uids)
     return db.sync();
 }
 
-
-bool passwd(const std::string &db_file, const std::string &db_password)
+bool change_passwd(const std::string &db_file, const std::string &db_password)
 {
     encrypted_pwstore db(db_file, db_password);
     if(!db)
@@ -253,6 +259,46 @@ bool passwd(const std::string &db_file, const std::string &db_password)
     return db.sync();
 }
 
+bool gen_passwd(const std::string &db_file, const std::string &db_password)
+{
+    encrypted_pwstore db(db_file, db_password);
+    if(!db)
+        return false;
+
+    pw_store::data_type date;
+    std::cout << "Url:\n";
+    std::getline(std::cin, date.url_string);
+    std::cout << "User:\n";
+    std::getline(std::cin, date.username);
+
+    if(!date.url_string.length() && !date.username.length()) {
+        std::cerr << "Error: creating a password for an empty"
+                     "key does not make sense.\n       How would"
+                     "you retrieve it? Aborting.\n";
+        return false;
+    }
+
+    std::string ascii_set;
+    for(int i = 0; i < 255; i++)
+        if(isprint(i))
+            ascii_set.push_back(char(i));
+    if(!libaan::crypto::read_random_ascii_set(12, ascii_set, date.password)) {
+        std::cerr << "Error creating a password from random data. Aborting.\n";
+        return false;
+    }
+
+    if(!db.get().insert(date)) {
+        std::cerr << "Error: inserting in database failed.\n";
+        return false;
+    }
+
+    std::cout << "Created and stored key for: " << date << ".\n";
+    if(!provide_value_to_user(date.password))
+        return false;
+    std::cout << date << " -> copied to x11 clipboard.\n";
+
+    return db.sync();
+}
 
 bool dump(const std::string &db_file, const std::string &db_password)
 {
@@ -399,16 +445,9 @@ bool interactive_lookup(const std::string &db_file, const std::string &db_passwo
                         pw_store::data_type date;
                         if(db.get().get(id, date)) {
                             std::cout << id << ": " << date << "\n";
-                            // TODO: x11_clipboard_copy
-#ifndef NO_GOOD
-                            if (!libaan::util::x11::add_to_clipboard(
-                                    date.password, std::chrono::milliseconds(10000))) {
-                                // std::cerr << "Error accessing x11 clipboard before timeout.\n";
-                            }
-
-                            // TODO: x11_clipboard_copy
-                            std::cout << id << ": " << date << " -> copied to x11 clipboard.\n";
-#endif
+                            if(provide_value_to_user(date.password))
+                                std::cout << id << ": " << date
+                                          << " -> copied to x11 clipboard.\n";
                             // should be false at the moment
                             // change = false;
                         } else
@@ -536,8 +575,11 @@ bool run(config_type config)
     case config_type::REMOVE:
         ret = remove(config.db_file, db_password, config.uids);
         break;
-    case config_type::PASSWD:
-        ret = passwd(config.db_file, db_password);
+    case config_type::CHANGE_PASSWD:
+        ret = change_passwd(config.db_file, db_password);
+        break;
+    case config_type::GEN_PASSWD:
+        ret = gen_passwd(config.db_file, db_password);
         break;
     }
 
@@ -557,7 +599,8 @@ void usage(int argc, char *argv[])
               << "    dump\n"
               << "    lookup\n"
               << "    remove\n"
-              << "    passwd  change password and reencrypt db-file\n"
+              << "    change_passwd    change password and reencrypt db-file\n"
+              << "    gen_passwd       generate a password and store it in db-file\n"
               << "  optional-key:\n"
               << "    used only for lookup command in non-interactive mode.\n";
 }
@@ -619,6 +662,97 @@ bool backup_db(const std::string &db_file)
     return true;
 }
 
+bool parse_and_check_args(int argc, char *argv[], config_type &config)
+{
+    config.interactive = false;
+    // parse arguments
+    for (int arg_index = 1; arg_index < argc; arg_index++) {
+        if (argv[arg_index][0] == '-') {
+            if (argv[arg_index][1] == 'i')
+                config.interactive = true;
+            else if (argv[arg_index][1] == 'n') {
+                if (arg_index + 1 >= argc)
+                    return false;
+                const auto uid_arg = argv[++arg_index];
+                config.uids.push_back(std::strtoul(uid_arg, nullptr, 10));
+            } else if (argv[arg_index][1] == 'f') {
+                if (arg_index + 1 >= argc)
+                    return false;
+                config.db_file = std::string(argv[++arg_index]);
+            }
+        } else {    // commands
+            if (!std::strcmp(argv[arg_index], "add"))
+                config.mode = config_type::ADD;
+            else if (!std::strcmp(argv[arg_index], "dump"))
+                config.mode = config_type::DUMP;
+            else if (!std::strcmp(argv[arg_index], "init"))
+                config.mode = config_type::INIT;
+            else if (!std::strcmp(argv[arg_index], "lookup"))
+                config.mode = config_type::LOOKUP;
+            else if (!std::strcmp(argv[arg_index], "remove"))
+                config.mode = config_type::REMOVE;
+            else if (!std::strcmp(argv[arg_index], "change_passwd"))
+                config.mode = config_type::CHANGE_PASSWD;
+            else if (!std::strcmp(argv[arg_index], "gen_passwd"))
+                config.mode = config_type::GEN_PASSWD;
+            else
+                config.lookup_key.assign(argv[arg_index]);
+        }
+    }
+
+    // check validity of arguments
+    if (config.interactive) {
+        if (config.lookup_key.length()) {
+            std::cerr << "Error: <optional-key> unneeded in interactive mode\n";
+            return false;
+        }
+        if (config.mode == config_type::ADD)
+            config.mode = config_type::INTERACTIVE_ADD;
+        else if (config.mode == config_type::LOOKUP)
+            config.mode = config_type::INTERACTIVE_LOOKUP;
+        else {
+            std::cerr << "Error: interactive mode only availabler for add or "
+                         "lookup commands.\n";
+            return false;
+        }
+    } else {
+        if (config.mode != config_type::LOOKUP && config.lookup_key.length()) {
+            std::cerr << "Error: key only needed for lookup command.\n";
+            return false;
+        }
+    }
+
+    if (config.uids.size()
+        && config.mode != config_type::LOOKUP
+        && config.mode != config_type::REMOVE) {
+        std::cerr << "Error: uids only used for lookup and remove commands.\n";
+        return false;
+    }
+
+    // at least one must be set for lookup
+    if (config.mode == config_type::LOOKUP && !config.uids.size() &&
+        !config.lookup_key.length()) {
+        std::cerr << "Error: non-interactive lookup command needs either "
+                     "specified uids or a an <optional-key>.\n";
+        return false;
+    }
+
+    if (config.mode == config_type::REMOVE && !config.uids.size()) {
+        std::cerr << "Error: specify at least one uid for remove command.\n";
+        return false;
+    }
+
+    if (config.mode == config_type::CHANGE_PASSWD &&
+        (config.uids.size() || config.lookup_key.length())) {
+        std::cerr << "Error: change_passwd command has no need for uids/<optional-key>.\n";
+        return false;
+    }
+
+    if (!config.db_file.length())
+        config.db_file = DEFAULT_CIPHER_DB;
+
+    return true;
+}
 }
 
 int main(int argc, char *argv[])
@@ -638,98 +772,10 @@ int main(int argc, char *argv[])
 #endif
 
     config_type config;
-    config.interactive = false;
-    // parse arguments
-    for(int arg_index = 1; arg_index < argc; arg_index++) {
-        if(argv[arg_index][0] == '-') {
-            if(argv[arg_index][1] == 'i')
-                config.interactive = true;
-            else if(argv[arg_index][1] == 'n') {
-                if(arg_index + 1 >= argc) {
-                    usage(argc, argv);
-                    exit(EXIT_FAILURE);
-                }
-                const auto uid_arg = argv[++arg_index];
-                config.uids.push_back(std::strtoul(uid_arg, nullptr, 10));
-            } else if(argv[arg_index][1] == 'f') {
-                if(arg_index + 1 >= argc) {
-                    usage(argc, argv);
-                    exit(EXIT_FAILURE);
-                }
-                config.db_file = std::string(argv[++arg_index]);
-            }
-        } else { // commands
-            if(!std::strcmp(argv[arg_index], "add"))
-                config.mode = config_type::ADD;
-            else if(!std::strcmp(argv[arg_index], "dump"))
-                config.mode = config_type::DUMP;
-            else if(!std::strcmp(argv[arg_index], "init"))
-                config.mode = config_type::INIT;
-            else if(!std::strcmp(argv[arg_index], "lookup"))
-                config.mode = config_type::LOOKUP;
-            else if(!std::strcmp(argv[arg_index], "remove"))
-                config.mode = config_type::REMOVE;
-            else if(!std::strcmp(argv[arg_index], "passwd"))
-                config.mode = config_type::PASSWD;
-            else
-                config.lookup_key.assign(argv[arg_index]);
-        }
-    }
-
-    // check validity of arguments
-    if(config.interactive) {
-        if(config.lookup_key.length()) {
-            usage(argc, argv);
-            exit(EXIT_FAILURE);
-        }
-        if(config.mode == config_type::ADD)
-            config.mode = config_type::INTERACTIVE_ADD;
-        else if(config.mode == config_type::LOOKUP)
-            config.mode = config_type::INTERACTIVE_LOOKUP;
-        else {
-            usage(argc, argv);
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        if (config.mode != config_type::LOOKUP
-            && config.lookup_key.length()) {
-            usage(argc, argv);
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    if(config.uids.size()
-       && config.mode != config_type::LOOKUP
-       && config.mode != config_type::REMOVE) {
+    if(!parse_and_check_args(argc, argv, config)) {
         usage(argc, argv);
         exit(EXIT_FAILURE);
     }
-
-    // at least one must be set for lookup
-    if(config.mode == config_type::LOOKUP
-       && !config.uids.size()
-       && !config.lookup_key.length()) {
-        usage(argc, argv);
-        exit(EXIT_FAILURE);
-    }
-
-    if(config.mode == config_type::REMOVE
-       && !config.uids.size()) {
-        usage(argc, argv);
-        exit(EXIT_FAILURE);
-    }
-
-    if(config.mode == config_type::PASSWD
-       && (config.uids.size()
-
-           || config.lookup_key.length())) {
-        usage(argc, argv);
-        exit(EXIT_FAILURE);
-    }
-
-
-    if(!config.db_file.length())
-        config.db_file = DEFAULT_CIPHER_DB;
 
     // create a backup file before applying any modifying commands.
     switch(config.mode) {
@@ -741,7 +787,8 @@ int main(int argc, char *argv[])
     case config_type::INIT:
     case config_type::INTERACTIVE_ADD:
     case config_type::REMOVE:
-    case config_type::PASSWD:
+    case config_type::CHANGE_PASSWD:
+    case config_type::GEN_PASSWD:
     default:
         if(!backup_db(config.db_file))
             std::cerr << "Could not create database backup. Better be careful.\n";

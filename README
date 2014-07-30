@@ -7,14 +7,23 @@ Missing/Bugs
     rethink data structure and uid.
 
   o x11 clipboard algorithm
-    windows equivalent?
-    provide option to copy first username, then after selection request the password.
+    Windows equivalent?
+    Provide option to copy first username, then after selection request the
+    password.
+    What todo in a ssh session?
 
   o cli:
-    emacs style key bindings are not the best choice for usability..(except for emacs users)
-    disabling ECHO in termios settings has no effect
-    select
-    alternate mode does not clear the screen correctly using ssh in cygwin terminal
+    Emacs style key bindings are not the best choice for usability..(except
+    for emacs users).
+    -> per default in filter mode
+    -> enter command mode with: <ENTER>
+       in command mode use same bindings as now, but without CTRL-modifier
+
+    Disabling ECHO in termios settings has no effect.
+    select instead of busy wait.
+
+    Alternate mode does not clear the screen correctly using ssh in cygwin
+    terminal.
 
   o gui:
     python/tk + boost python?
@@ -24,6 +33,10 @@ Missing/Bugs
     crypto backend needs RNG. see comment.
     interactive lookup not working yet. port terminal_util.hh
 
+  o micha wants a point&click gui
+    display all entries per dflt
+    filter entries with partial string search on user input
+    select entry with double click -> copy pw in copypaste-buffer
 
 Usage
   Add some data:
