@@ -40,12 +40,6 @@ namespace pw_store {
 struct data_type
 {
     using id_type = std::size_t;
-/*
-Possibly provide hash as another key to ease lookup:
-    libaan::crypto::hash h;
-    h.sha1(data.url_string + data.username + data.password, data.hash);
-Is non-interactive lookup even worthwile?
-*/
     data_type()
         : data_type("", "", "") {}
     data_type(const std::string & url, const std::string & user,
@@ -63,8 +57,7 @@ Is non-interactive lookup even worthwile?
 inline std::string data_type::to_string() const
 {
     return std::string("(\"") + url_string + std::string("\", \"") + username +
-           std::string("\", \"") + "***"    // date.password
-           + std::string("\")");
+           std::string("\", \"") + "***" + std::string("\")");
 }
 
 inline std::ostream &operator<<(std::ostream &os, const data_type &date)
@@ -81,14 +74,6 @@ public:
     // Create database object from string buffer. No copying involved.
     explicit database(std::string &buffer)
         : dirty(false), string_buffer(buffer) {}
-/*
-    explicit database(const database &other)
-        : dirty(other.dirty),
-          string_buffer(other.string_buffer),
-          line_count(other.line_count),
-          urluserpw(other.urluserpw)
-    {}
-*/
 
     ~database() { clear_all_buffers(); }
     // Parse the provided buffer.
@@ -189,6 +174,9 @@ private:
     bool dirty;
     std::string &string_buffer;
     size_t line_count;
+
+    // use dc3 suffix-array from libaan for readonly databases in case of
+    // interactive lookup
     std::vector<tuple_type> urluserpw;
 };
 

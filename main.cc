@@ -575,22 +575,20 @@ bool run(config_type config)
 
 void usage(int argc, char *argv[])
 {
-    std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n"
+    std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n\n"
               << "  possible flags are:\n"
               << "    -f <db-file>  use this file as database\n"
-              << "    -i            interactive can be used with add or lookup\n"
               << "    -n <uid>      can only be used with non-interactive lookup/remove\n"
               << "                  multiple uids can be specified for remove\n"
               << "    -o            dump retrieved password to stdout\n"
+              << "    -i            interactive\n\n"
               << "  possible commands are:\n"
-              << "    add\n"
+              << "    add [-i]\n"
               << "    dump\n"
-              << "    lookup\n"
-              << "    remove\n"
-              << "    change_passwd    change password and reencrypt db-file\n"
-              << "    gen_passwd       generate a password and store it in db-file\n"
-              << "  optional-key:\n"
-              << "    used only for lookup command in non-interactive mode.\n";
+              << "    lookup <optional-key> [-i] [-o] [-n <uid>]\n"
+              << "    remove                (-n <uid>)+\n"
+              << "    change_passwd         change password and reencrypt db-file\n"
+              << "    gen_passwd            generate a password and store it in db-file\n";
 }
 
 
