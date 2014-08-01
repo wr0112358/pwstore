@@ -1,6 +1,6 @@
 Password Storage With OpenSSL Backed Cryptography
 
-Work in progress.
+Work in progress. But in use and working.
 
 Missing/Bugs
   o general:
@@ -21,7 +21,10 @@ Missing/Bugs
 
   o point&click gui:
     python/tk + boost python?
-    -> needs some refactoring
+    needs some refactoring:
+      reencryption for every operation is not feasible. Move all methods
+      add/lookup/.. to a class that saves the current state(=crypto file
+      and db).
     display all entries per dflt
     filter entries with partial string search on user input
     select entry with double click -> copy pw in copypaste-buffer
@@ -29,6 +32,44 @@ Missing/Bugs
   o windows:
     crypto backend needs RNG. see comment.
     interactive lookup not working yet. port terminal_util.hh
+
+# first real usage revealed:
+
+dump -o should dump pws in cleartext too
+
+env_variable to specify default db
+
+add -i
+
+remove
+  add switch -f
+  when switch not specified: read (y/*)
+  dump deleted entry
+
+lookup -o should allow multiple "-n directives"
+
+all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
+
+provide bash_completion script
+
+auto resize terminal, so that it works at least for me under awesome wm
+
+add build instructions for windows and used deps to this file
+
+add howto for usage:
+    awful.key({ ctrlkey, }, "2", function () awful.util.spawn("urxvt256c -e /opt/usr/bin/pwstore -f DB_FILE lookup -i") end),
+
+timeout for interactive mode, after which pw must be reentered?
+
+print keys without "'s around it, so copy/paste is easier.
+
+new mode for lookup, that is enabled by cmdline flag or by a command_option in interactive mode:
+  copy first username and if successfull copy password!
+
+backup files are nice, but kinda too many of them keep floating around..
+  commandline flag to delete some/all.
+  show changes made since a specific backup file. (history functionality)
+#
 
 Usage
   Add some data:
