@@ -1,19 +1,19 @@
 /*
-typedef void *pwstore_handle;
+Copyright (C) 2014 Reiter Wolfgang wr0112358@gmail.com
 
-struct dataset
-{
-    char *username;
-    size_t username_length;
-    char *url;
-    size_t url_length;
-    char *passwd;
-    size_t passwd_length;
-};
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
 
-// type (*function)(argtypes);
-typedef void (*provide_password_callback)(pwstore_handle, const char *, size_t);
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
 #include "pwstore_api_c.h"
@@ -55,12 +55,6 @@ static void convert(const dataset &from, pw_store::data_type &to)
     to.password.assign(from.passwd);
 }
 
-/*
-static void convert(const std::vector<pw_store::data_type::id_type> &from,
-                    size_t *to, size_t to_length)
-{}
-*/
-
 static void convert(const size_t *from, size_t from_length,
                     std::vector<pw_store::data_type::id_type> &to)
 {
@@ -69,8 +63,6 @@ static void convert(const size_t *from, size_t from_length,
         to.push_back(from[i]);
 }
 
-// caller owns the ressources. all internally allocated ressources are free on
-// pwstore_exit.
 pwstore_handle pwstore_create(const char *password, size_t password_length,
                               const char *db_file, size_t db_file_length)
 {
