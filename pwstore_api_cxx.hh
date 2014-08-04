@@ -51,50 +51,14 @@ public:
     pw_store::database &get() { return *db; }
     const pw_store::database &get() const { return *db; }
 
+    // All changes will be discarded. If state of database was modified
+    // sync() should be called before.
+    void lock();
+    bool unlock(const std::string &passwd);
+
 private:
-    bool sync_and_write_db()
-    {
-        if(!db || !crypto_file)
-            return false;
-        using namespace libaan::crypto::file;
-        db->synchronize_buffer();
-        const auto err = crypto_file->write(password);
-        if (err != crypto_file::NO_ERROR) {
-            std::cerr << "Writing database to disk failed. Error: "
-                      << crypto_file::error_string(err) << "\n";
-            return false;
-        }
-
-        return true;
-    }
-
-    std::unique_ptr<pw_store::database> load_db()
-    {
-        if(!crypto_file)
-            return nullptr;
-
-        using namespace libaan::crypto::file;
-
-        // Read encrypted database with provided password.
-        auto err = crypto_file->read(password);
-        if(err != crypto_file::NO_ERROR) {
-            std::cerr << "Error deciphering database. Wrong key? ("
-                      << crypto_file::error_string(err) << ")\n";
-            return nullptr;
-        }
-
-        // The only reason for not using an automatic variable for db per function
-        // is to avoid duplicate code..
-        // Better to be replaced with a class.
-        std::unique_ptr<pw_store::database> db(
-            new pw_store::database(crypto_file->get_decrypted_buffer()));
-        if(!db->parse()) {
-            std::cerr << "Error: corrupt database file.\n";
-            return nullptr;
-        }
-
-        return db;
-    }
+    bool sync_and_write_db();
+    std::unique_ptr<pw_store::database> load_db();
 
 private:
     std::unique_ptr<libaan::crypto::file::crypto_file> crypto_file;
@@ -126,6 +90,8 @@ public:
     bool dump() const;
 
     bool sync();
+    void lock();
+    bool unlock(const std::string &password);
 
     operator bool() const { return state; }
 

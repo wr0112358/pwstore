@@ -192,6 +192,18 @@ bool pwstore_sync(pwstore_handle handle)
     return obj->db->sync();
 }
 
+void pwstore_lock(pwstore_handle handle)
+{
+    pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
+    obj->db->lock();
+}
+
+bool pwstore_unlock(pwstore_handle handle, const char *password)
+{
+    pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
+    return obj->db->unlock(std::string(password));
+}
+
 bool pwstore_state(pwstore_handle handle)
 {
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);

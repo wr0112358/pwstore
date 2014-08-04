@@ -38,10 +38,8 @@ Missing/Bugs
 
 # first real usage revealed:
 
-timeout for interactive mode, after which pw must be reentered?
-
-new mode for lookup, that is enabled by cmdline flag or by a command_option in interactive mode:
-  copy first username and if successfull copy password!
+new mode for lookup, that is enabled by cmdline flag or by a command_option
+in interactive mode: copy first username and if successfull copy password.
 
 backup files are nice, but kinda too many of them keep floating around..
   commandline flag to delete some/all.

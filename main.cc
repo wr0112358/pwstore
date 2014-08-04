@@ -147,23 +147,24 @@ bool get(pw_store_api_cxx::pwstore_api &db, config_type &config)
     return true;
 }
 
-
 // needs non-const config_type since remove sorts the uid vector
 bool remove(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     if(!config.force) {
         libaan::util::rawmode tty_raw;
+
         // if sth is available from stding, discard it.
         while (tty_raw.kbhit())
             tty_raw.getch();
 
         std::cout << "Remove the following entries from database(Y/n)?\n";
+
         // lookup all entries specified for removal
         lookup(db, config);
+
         // read y/n from user
         const auto in = tty_raw.getch();
         // abort if anything except Y was entered
-        //if(!(in == 'y' || in == 'Y'))
         if(in != 'Y') {
             std::cout << "Aborted. Nothing removed.\n";
             return false;
@@ -263,22 +264,21 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
         std::string print_after_terminal_reset;
     } raii;
 
-    //get user input async
-    // TODO: select would be better, but 100ms cycletime works
+    // TODO: select would be better, but 150ms cycletime works
     //       good enough for now and does not seem to have much
     //       cpu impact.
     const std::chrono::milliseconds dura(150);
+    const size_t DEFAULT_TIMEOUT_SECS = 20;
+    auto time_of_last_change = std::chrono::high_resolution_clock::now();
+
     std::string input;
     std::string last_lookup;
 
     enum state_type {
-        COMMAND,        // "command_mode": commands activated with Ctrl-x key
-                       // combinations
-        ACCUMULATE,    // "accumalation mode": all input is gathered in a
-                       // string. for now only used for x11 clipboard population.
+        COMMAND,        // "command_mode"
+        ACCUMULATE,    // "accumalation mode"
         NORMAL         // normal input mode
-    } state;
-    state = NORMAL;
+    } state = NORMAL;
     bool show_help = false;
     bool dump_db = false;
     std::string accumulate;
@@ -286,97 +286,114 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
     bool terminate = false;
 
     while(true) {
-        if(terminate || (state == COMMAND && SIGINT_CAUGHT)) {
-            raii.print_after_terminal_reset.assign("Terminating by request.\n");
-            SIGINT_CAUGHT = false;
-            return true;
-        }
 
         bool change = false;
         if(only_once) {
             change = true;
             only_once = false;
         }
+
+        if(terminate || (state == COMMAND && SIGINT_CAUGHT)) {
+            raii.print_after_terminal_reset.assign("Terminating by request.\n");
+            SIGINT_CAUGHT = false;
+            return true;
+        }
+
+        // lock db after a fixed time
+        if (std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::high_resolution_clock::now() - time_of_last_change)
+                .count() > DEFAULT_TIMEOUT_SECS) {
+            db.lock();
+            libaan::util::terminal::alternate_screen_on();
+            std::cout << "Database locked after " << DEFAULT_TIMEOUT_SECS
+                      << " seconds of inactivity.\n";
+            const libaan::crypto::util::password_from_stdin db_password(2);
+            if(!db_password) {
+                std::cerr << "Password Error. Too short?\n";
+                return false;
+            }
+            if(!db.unlock(db_password))
+                return false;
+            time_of_last_change = std::chrono::high_resolution_clock::now();
+            change = true;
+        }
+
         {
-            // TODO: move rawmode object out of the loop.
-            //       -> ignoring signals necessary: see test1 in lib testsuite
             libaan::util::rawmode tty_raw;
             while (tty_raw.kbhit() && !terminate) {
                 bool ignore = true;
                 const auto in = tty_raw.getch();
-
-                if(state == COMMAND) {
-                    if(in == 'q') {
+                if (state == COMMAND) {
+                    if (in == 'q') {
                         terminate = true;
                         break;
-                    } else if(in == 'k') {
+                    } else if (in == 'k') {
                         change = true;
                         input.clear();
-                    } else if(in == CTRL('g')) {
+                    } else if (in == CTRL('g')) {
                         change = true;
                         show_help = false;
                         dump_db = false;
-                    } else if(in == 'h') {
+                    } else if (in == 'h') {
                         show_help = true;
                         change = true;
-                    } else if(in == 'l') {
+                    } else if (in == 'l') {
                         dump_db = true;
                         change = true;
-                    } else if(isdigit(in)) {
+                    } else if (isdigit(in)) {
                         state = ACCUMULATE;
                         input.clear();
                         // don't forget this number
                         accumulate.push_back(static_cast<char>(in));
                         change = true;
-                    } else if(in == CTRL('x'))
+                    } else if (in == CTRL('x'))
                         terminate = true;
 
-                    if(change && state != ACCUMULATE)
+                    if (change && state != ACCUMULATE)
                         state = NORMAL;
-                } else if(state == ACCUMULATE) {
+                } else if (state == ACCUMULATE) {
                     if (in == '\n') {
                         pw_store::data_type::id_type id =
                             std::strtol(accumulate.c_str(), nullptr, 10);
                         pw_store::data_type date;
-                        if(db.get(id, date)) {
-                            if(config.provide_value_to_user(date.password))
-                                std::cout << "Retrieved value for <id> " << id << ".\n";
-                            // should be false at the moment
-                            // change = false;
+                        if (db.get(id, date)) {
+                            if (config.provide_value_to_user(date.password))
+                                std::cout << "Retrieved value for <id> " << id
+                                          << ".\n";
                         } else
                             change = true;
                         accumulate.clear();
                         state = NORMAL;
-                        //} else if(isgraph(in)) {
-                    } else if(isdigit(in)) {
+                    } else if (isdigit(in)) {
                         accumulate.push_back(static_cast<char>(in));
                         change = true;
-                    } else if(in == CTRL('g')) {
+                    } else if (in == CTRL('g')) {
                         change = true;
                         state = NORMAL;
                         accumulate.clear();
-                    } else if(in == CTRL('x'))
+                    } else if (in == CTRL('x'))
                         terminate = true;
-                } else if(state == NORMAL) {
-                    if(in == '\n') {
+                } else if (state == NORMAL) {
+                    if (in == '\n') {
                         state = COMMAND;
                         change = true;
-                    } else if(isgraph(in)) //isalnum(in))
+                    } else if (isgraph(in))
                         ignore = false;
-                    else if(in == CTRL('g')) {
+                    else if (in == CTRL('g')) {
                         change = true;
                         show_help = false;
                         dump_db = false;
-                    } else if(in == CTRL('x'))
+                    } else if (in == CTRL('x'))
                         terminate = true;
 
-                    if(!ignore) {
+                    if (!ignore) {
                         input.push_back(static_cast<char>(in));
                         change = true;
                     }
                 }
             }
         }
+
         if(!change) {
 #ifdef NO_GOOD
             usleep(dura.count() * 1000);
@@ -385,6 +402,8 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
 #endif
             continue;
         }
+
+        time_of_last_change = std::chrono::high_resolution_clock::now();
 
         // handle input
         if(input.length()) {
@@ -410,25 +429,30 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
                   dump_db(dump_db),
                   db(db)
             {}
+
             ~gui()
             {
-                const std::string SEP = "_________________________________________\n\n";
+                const std::string SEP =
+                    "_________________________________________\n\n";
                 libaan::util::terminal::alternate_screen_on();
                 std::cout << ui_help << SEP;
-                if(help)
-                    std::cout << ""
-                              << "C-x means: Press x-key while holding down Ctrl.\n"
-                              << SEP;
-                if(state == COMMAND)
-                    std::cout << ui_last_command_prefix << key << ui_last_command_suffix;
-                else if(state == NORMAL)
+                if (help)
+                    std::cout
+                        << ""
+                        << "C-x means: Press x-key while holding down Ctrl.\n"
+                        << SEP;
+                if (state == COMMAND)
+                    std::cout << ui_last_command_prefix << key
+                              << ui_last_command_suffix;
+                else if (state == NORMAL)
                     std::cout << ui_last_normal_prefix << key
                               << ui_last_normal_suffix;
-                else if(state == ACCUMULATE)
-                    std::cout << ui_last_accumulate_prefix << accumulate << ui_last_accumulate_suffix;
+                else if (state == ACCUMULATE)
+                    std::cout << ui_last_accumulate_prefix << accumulate
+                              << ui_last_accumulate_suffix;
                 std::cout << SEP;
                 std::cout << last_lookup << (last_lookup.length() ? SEP : "");
-                if(dump_db)
+                if (dump_db)
                     dump(db);
             }
             bool help;

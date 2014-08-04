@@ -77,6 +77,10 @@ bool pwstore_gen_entry(pwstore_handle handle, const char *username,
 bool pwstore_dump(pwstore_handle handle);
 
 bool pwstore_sync(pwstore_handle handle);
+
+void pwstore_lock(pwstore_handle handle);
+bool pwstore_unlock(pwstore_handle handle, const char *password);
+
 bool pwstore_state(pwstore_handle handle);
 
 #ifdef __cplusplus

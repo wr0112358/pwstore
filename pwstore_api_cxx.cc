@@ -18,6 +18,64 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "pwstore_api_cxx.hh"
 
+bool pw_store_api_cxx::encrypted_pwstore::sync_and_write_db()
+{
+    if(!db || !crypto_file)
+        return false;
+    using namespace libaan::crypto::file;
+    db->synchronize_buffer();
+    const auto err = crypto_file->write(password);
+    if (err != crypto_file::NO_ERROR) {
+        std::cerr << "Writing database to disk failed. Error: "
+                  << crypto_file::error_string(err) << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+std::unique_ptr<pw_store::database> pw_store_api_cxx::encrypted_pwstore::load_db()
+{
+    if (!crypto_file)
+        return nullptr;
+
+    using namespace libaan::crypto::file;
+
+    // Read encrypted database with provided password.
+    auto err = crypto_file->read(password);
+    if (err != crypto_file::NO_ERROR) {
+        std::cerr << "Error deciphering database. Wrong key? ("
+                  << crypto_file::error_string(err) << ")\n";
+        return nullptr;
+    }
+
+    // The only reason for not using an automatic variable for db per function
+    // is to avoid duplicate code..
+    // Better to be replaced with a class.
+    std::unique_ptr<pw_store::database> db(
+        new pw_store::database(crypto_file->get_decrypted_buffer()));
+    if (!db->parse()) {
+        std::cerr << "Error: corrupt database file.\n";
+        return nullptr;
+    }
+
+    return db;
+}
+
+void pw_store_api_cxx::encrypted_pwstore::lock()
+{
+    std::fill(std::begin(password), std::end(password), 0);
+    db.reset(nullptr);
+    crypto_file->clear_buffers();
+}
+
+bool pw_store_api_cxx::encrypted_pwstore::unlock(const std::string &passwd)
+{
+    password.assign(passwd);
+    db = load_db();
+    return db != nullptr;
+}
+
 bool pw_store_api_cxx::pwstore_api::add(const pw_store::data_type &date)
 {
     if (!state)
@@ -140,4 +198,14 @@ bool pw_store_api_cxx::pwstore_api::sync()
         return false;
 
     return db.sync();
+}
+
+void pw_store_api_cxx::pwstore_api::lock()
+{
+    db.lock();
+}
+
+bool pw_store_api_cxx::pwstore_api::unlock(const std::string &password)
+{
+    return db.unlock(password);
 }
