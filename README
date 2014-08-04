@@ -41,9 +41,6 @@ env_variable to specify default db
 
 add -i
 
-remove
-  dump deleted entry
-
 all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
 
 provide bash_completion script
