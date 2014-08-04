@@ -487,7 +487,12 @@ void usage(int argc, char *argv[])
               << "    get                   [-o] -n <uid>\n"
               << "    remove                (-n <uid>)+ [--force]\n"
               << "    change_passwd         change password and reencrypt db-file\n"
-              << "    gen_passwd            generate a password and store it in db-file\n";
+              << "    gen_passwd            generate a password and store it in db-file\n"
+              << "  database name to be used is taken from:\n"
+              << "    environment variable PWSTORE_DB_FILE\n"
+              << "    -f <db-file> flag\n"
+              << "    default filename: " << DEFAULT_CIPHER_DB << "\n"
+              << "    -f flag overrides all, $PWSTORE_DB_FILE overrides default name.\n";
 }
 
 
@@ -658,8 +663,13 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
         return false;
     }
 
-    if (!config.db_file.length())
-        config.db_file = DEFAULT_CIPHER_DB;
+    if (!config.db_file.length()) {
+        const auto env_db = getenv("PWSTORE_DB_FILE");
+        if(!env_db || !env_db[0])
+            config.db_file = DEFAULT_CIPHER_DB;
+        else
+            config.db_file = std::string(env_db);
+    }
 
     if(output == TO_X11) {
 #ifndef NO_GOOD
@@ -724,7 +734,7 @@ int main(int argc, char *argv[])
             std::cerr << "Could not create database backup. Better be careful.\n";
     }
 
-    if(!run(config))
+    if(!run(config)) // TODO: remove backup?
         exit(EXIT_FAILURE);
 
     exit(EXIT_SUCCESS);

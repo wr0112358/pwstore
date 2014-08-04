@@ -37,8 +37,6 @@ Missing/Bugs
 
 dump -o should dump pws in cleartext too
 
-env_variable to specify default db
-
 add -i
 
 all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
