@@ -43,8 +43,6 @@ add -i
 
 all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
 
-provide bash_completion script
-
 auto resize terminal, so that it works at least for me under awesome wm
 
 add build instructions for windows and used deps to this file

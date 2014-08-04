@@ -3,7 +3,8 @@ CXX_FLAGS=-std=c++11 -g -Wall -Werror
 DEFINES=
 APP=pwstore
 
-INSTALL_DIR=/opt/usr/bin/
+INSTALL_BIN_DIR=/opt/usr/bin
+INSTALL_SHARE_DIR=/opt/usr/share
 
 #INCLUDES=-I.deps/
 INCLUDES=-I..
@@ -24,8 +25,10 @@ pwstore: $(objects_pwstore)
 clean :
 	rm -f *.o pwstore pwstore.exe
 
-install:
-	cp pwstore $(INSTALL_DIR)
+install: pwstore
+	cp pwstore $(INSTALL_BIN_DIR)
+	cp .pwstore-completion.sh $(INSTALL_SHARE_DIR)
+	@printf "\nTo enable bash completion for $(APP).\nAdd to .bashrc:\n\tsource $(INSTALL_SHARE_DIR)/.pwstore-completion.sh\n"
 
 
 win64: CXX=x86_64-w64-mingw32-g++
