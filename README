@@ -42,11 +42,7 @@ env_variable to specify default db
 add -i
 
 remove
-  add switch -f
-  when switch not specified: read (y/*)
   dump deleted entry
-
-lookup -o should allow multiple "-n directives"
 
 all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
 

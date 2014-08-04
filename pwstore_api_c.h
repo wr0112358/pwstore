@@ -58,9 +58,16 @@ bool pwstore_remove_one(pwstore_handle handle, size_t uid);
 
 bool pwstore_change_password(pwstore_handle handle, const char *new_password,
                              size_t new_password_length);
+// Generate and store a password for provided username and url strings.
+// Return false on failure.
+// On success true is returned. If the provided buffer password is to
+// small for the generated password, password buffer is not filled and
+// password_real_length contains the real password size. pwstore_get should
+// then be used.
+// TODO: fail if buffer to small.. possible since pw size is known in advance..
 bool pwstore_gen_entry(pwstore_handle handle, const char *username,
-                       const char *url_string,
-                       provide_password_callback callback);
+                       const char *url_string, char *password,
+                       size_t password_length, size_t *password_real_length);
 bool pwstore_dump(pwstore_handle handle);
 
 bool pwstore_sync(pwstore_handle handle);

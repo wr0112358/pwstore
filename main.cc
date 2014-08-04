@@ -51,8 +51,9 @@ void sigint_handler(int signum)
 
 struct config_type {
     enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP,
-           LOOKUP, REMOVE, CHANGE_PASSWD, GEN_PASSWD } mode;
+           LOOKUP, REMOVE, CHANGE_PASSWD, GEN_PASSWD, GET } mode;
     bool interactive;
+    bool force;
     std::string lookup_key;
     std::vector<pw_store::data_type::id_type> uids;
     std::string db_file;
@@ -106,17 +107,53 @@ bool lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
         matches;
-    db.lookup(matches, config.provide_value_to_user, config.lookup_key, config.uids);
+    db.lookup(matches, config.lookup_key, config.uids);
     for(const auto &match: matches)
         std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
-    return db.sync();
+    return true;
 }
+
+
+bool get(pw_store_api_cxx::pwstore_api &db, config_type &config)
+{
+    pw_store::data_type date;
+    if(!db.get(config.uids.front(), date)) {
+        std::cerr << "Could not retrieve datum with id: " << config.uids.front() << ".\n";
+        return false;
+    }
+    if(!config.provide_value_to_user(date.password)) {
+        std::cerr << "Could not retrieve datum with id: " << config.uids.front() << ".\n";
+        return false;
+    }
+    std::cout << "Retrieved value for <id> " << config.uids.front() << ".\n";
+    return true;
+}
+
 
 // needs non-const config_type since remove sorts the uid vector
 bool remove(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
-    db.remove(config.uids);
+    if(!config.force) {
+        libaan::util::rawmode tty_raw;
+        // if sth is available from stding, discard it.
+        while (tty_raw.kbhit())
+            tty_raw.getch();
+
+        std::cout << "Remove the following entries from database(Y/n)?\n";
+        // lookup all entries specified for removal
+        lookup(db, config);
+        // read y/n from user
+        const auto in = tty_raw.getch();
+        // abort if anything except Y was entered
+        //if(!(in == 'y' || in == 'Y'))
+        if(in != 'Y')
+            return false;
+    }
+
+    if(!db.remove(config.uids))
+        return false;
+    std::cout << "Removed the specified entries.\n";
     return db.sync();
 }
 
@@ -132,7 +169,7 @@ bool change_passwd(pw_store_api_cxx::pwstore_api &db)
     return db.sync();
 }
 
-    bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
+bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     std::string url_string, username;
     std::cout << "Url:\n";
@@ -140,8 +177,12 @@ bool change_passwd(pw_store_api_cxx::pwstore_api &db)
     std::cout << "User:\n";
     std::getline(std::cin, username);
 
-    db.gen_passwd(username, url_string, config.provide_value_to_user);
+    std::string password;
+    if(!db.gen_passwd(username, url_string, password))
+        return false;
 
+    std::cout << "Generated and stored password. Retrieving password..\n";
+    config.provide_value_to_user(password);
     return db.sync();
 }
 
@@ -329,7 +370,7 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
             last_lookup.clear();
             std::list<std::tuple<pw_store::data_type::id_type,
                                  pw_store::data_type>> matches;
-            db.lookup(matches, config.provide_value_to_user, input, config.uids);
+            db.lookup(matches, input, config.uids);
             for(const auto &match: matches)
                 last_lookup.append(std::to_string(std::get<0>(match))
                                    + std::get<1>(match).to_string() + "\n");
@@ -422,6 +463,9 @@ bool run(config_type config)
     case config_type::GEN_PASSWD:
         ret = gen_passwd(db, config);
         break;
+    case config_type::GET:
+        ret = get(db, config);
+        break;
     }
 
     return ret;
@@ -440,7 +484,8 @@ void usage(int argc, char *argv[])
               << "    add [-i]\n"
               << "    dump\n"
               << "    lookup <optional-key> [-i] [-o] [-n <uid>]\n"
-              << "    remove                (-n <uid>)+\n"
+              << "    get                   [-o] -n <uid>\n"
+              << "    remove                (-n <uid>)+ [--force]\n"
               << "    change_passwd         change password and reencrypt db-file\n"
               << "    gen_passwd            generate a password and store it in db-file\n";
 }
@@ -507,12 +552,18 @@ bool backup_db(const std::string &db_file)
 bool parse_and_check_args(int argc, char *argv[], config_type &config)
 {
     config.interactive = false;
+    config.force = false;
     enum output_type { TO_X11, TO_STDOUT } output;
     output = TO_X11;
 
     // parse arguments
     for (int arg_index = 1; arg_index < argc; arg_index++) {
-        if (argv[arg_index][0] == '-') {
+        if ((argv[arg_index][0] == '-') && (argv[arg_index][1] == '-')){
+            // arguments starting with --
+            if (!std::strcmp(argv[arg_index], "--force"))
+                config.force = true;
+        } else if (argv[arg_index][0] == '-'){
+            // flags starting with a single '-'
             if (argv[arg_index][1] == 'i')
                 config.interactive = true;
             else if (argv[arg_index][1] == 'n') {
@@ -526,7 +577,8 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                 config.db_file = std::string(argv[++arg_index]);
             } else if (argv[arg_index][1] == 'o')
                 output = TO_STDOUT;
-        } else {    // commands
+        } else {
+            // commands
             if (!std::strcmp(argv[arg_index], "add"))
                 config.mode = config_type::ADD;
             else if (!std::strcmp(argv[arg_index], "dump"))
@@ -541,6 +593,8 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                 config.mode = config_type::CHANGE_PASSWD;
             else if (!std::strcmp(argv[arg_index], "gen_passwd"))
                 config.mode = config_type::GEN_PASSWD;
+            else if (!std::strcmp(argv[arg_index], "get"))
+                config.mode = config_type::GET;
             else
                 config.lookup_key.assign(argv[arg_index]);
         }
@@ -570,7 +624,8 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
 
     if (config.uids.size()
         && config.mode != config_type::LOOKUP
-        && config.mode != config_type::REMOVE) {
+        && config.mode != config_type::REMOVE
+        && config.mode != config_type::GET) {
         std::cerr << "Error: uids only used for lookup and remove commands.\n";
         return false;
     }
@@ -591,6 +646,15 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
     if (config.mode == config_type::CHANGE_PASSWD &&
         (config.uids.size() || config.lookup_key.length())) {
         std::cerr << "Error: change_passwd command has no need for uids/<optional-key>.\n";
+        return false;
+    }
+
+    if (config.mode == config_type::GET &&
+        (config.uids.size() != 1 || config.lookup_key.length() ||
+         config.force || config.interactive)) {
+        std::cerr << "Error: get command has no need for multiple "
+                     "uids/<optional-key>.\n"
+                     "Read the usage instructions.\n";
         return false;
     }
 

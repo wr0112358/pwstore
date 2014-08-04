@@ -100,20 +100,16 @@ bool pwstore_add(pwstore_handle handle, const struct dataset *data)
 
 bool pwstore_lookup(pwstore_handle handle, struct dataset **matches,
                     size_t matches_length, size_t *matches_real_length,
-                    provide_password_callback callback, const char *lookup_key,
-                    size_t lookup_key_length, size_t *uids, size_t uids_length)
+                    const char *lookup_key, size_t lookup_key_length,
+                    size_t *uids, size_t uids_length)
 {
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> matches_cxx;
-    std::function<bool(const std::string &)> cb_tmp = [&](const std::string &passwd) {
-        std::cout << "c-api calling: provide_password_callback\n";
-        callback(handle, passwd.c_str(), passwd.length());
-        return true;
-    };
+
     std::vector<pw_store::data_type::id_type> uids_cxx;
     if(uids && uids_length)
         convert(uids, uids_length, uids_cxx);
-    if(!obj->db->lookup(matches_cxx, cb_tmp, std::string(lookup_key), uids_cxx)) {
+    if(!obj->db->lookup(matches_cxx, std::string(lookup_key), uids_cxx)) {
         *matches_real_length = 0;
         return false;
     }
@@ -170,19 +166,26 @@ bool pwstore_change_password(pwstore_handle handle, const char *new_password,
 }
 
 bool pwstore_gen_entry(pwstore_handle handle, const char *username,
-                        const char *url_string,
-                        provide_password_callback callback)
+                       const char *url_string, char *password,
+                       size_t password_length, size_t *password_real_length)
 {
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
 
-    std::function<bool(const std::string &)> cb_tmp = [&](const std::string &passwd) {
-        std::cout << "c-api calling: provide_password_callback\n";
-        callback(handle, passwd.c_str(), passwd.length());
+    std::string pw_buff;
+    if(!obj->db->gen_passwd(std::string(username), std::string(url_string),
+                            pw_buff)) {
+        password_real_length = 0;
+        return false;
+    }
+    if(pw_buff.length() >= password_length) {
+        *password_real_length = pw_buff.length();
+        password[0] = '\0';
         return true;
-    };
+    }
 
-    return !obj->db->gen_passwd(std::string(username), std::string(url_string),
-                                cb_tmp);
+    std::strcpy(const_cast<char *>(pw_buff.c_str()), password);
+
+    return true;
 }
 
 bool pwstore_dump(pwstore_handle handle)

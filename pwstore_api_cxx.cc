@@ -16,27 +16,20 @@ bool pw_store_api_cxx::pwstore_api::add(const pw_store::data_type &date)
 bool pw_store_api_cxx::pwstore_api::lookup(
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> &
         matches,
-    std::function<bool(const std::string &)> &provide_value_to_user,
     const std::string &lookup_key,
     const std::vector<pw_store::data_type::id_type> &uids)
 {
     if (!state)
         return false;
 
-    if(uids.size()) {
-        pw_store::data_type data;
-        const auto ret = db.get().get(uids.front(), data);
-        if(ret) {
-            if(!provide_value_to_user(data.password))
-                return false;
-        }
-        return ret;
-    }
+    if(lookup_key.length())
+        db.get().lookup(lookup_key, matches);
 
-    db.get().lookup(lookup_key, matches);
-    for(const auto &match: matches)
-        std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
-    std::cout << "\n";
+    for(const auto &id: uids) {
+        pw_store::data_type data;
+        if(db.get().get(id, data))
+            matches.push_back(std::make_tuple(id, data));
+    }
 
     return true;
 }
@@ -77,7 +70,7 @@ pw_store_api_cxx::pwstore_api::change_password(const std::string &new_password)
 }
 
 bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username, const std::string &url_string,
-                                               std::function<bool(const std::string &)> &provide_value_to_user)
+                                               std::string &password)
 {
     if (!state)
         return false;
@@ -108,9 +101,7 @@ bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username, cons
     }
 
     std::cout << "Created and stored key for: " << date << ".\n";
-    if(!provide_value_to_user(date.password))
-        return false;
-    std::cout << date << " -> retrieved.\n";
+    password = date.password;
 
     return true;
 }

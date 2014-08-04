@@ -94,16 +94,16 @@ public:
     }
 
     bool add(const pw_store::data_type &date);
+    // lookup all entries matching lookup_key or an uid from uids. either of them may be empty.
     bool lookup(std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> &matches,
-                std::function<bool(const std::string &)> &provide_value_to_user,
                 const std::string &lookup_key,
-                const std::vector<pw_store::data_type::id_type> &uids = {}); // TODO: uid lookup -> get(uid)
+                const std::vector<pw_store::data_type::id_type> &uids);
     bool get(const pw_store::data_type::id_type &uid, pw_store::data_type &date);
     bool remove(std::vector<pw_store::data_type::id_type> &uids);
 
     bool change_password(const std::string &new_password);
     bool gen_passwd(const std::string &username, const std::string &url_string,
-                    std::function<bool(const std::string &)> &provide_value_to_user);
+                    std::string &password);
     // TODO: dump should just do an empty lookup and return all
     bool dump() const;
 
