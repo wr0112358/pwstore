@@ -16,33 +16,24 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include "pwstore.hh"
+
 
 #include <chrono>
 #include <functional>
-//#include <libgen.h> // dirname basename
 #include <list>
 #include <signal.h>
 #include <thread>
 #include <unistd.h>
 
-//#include "libaan/crypto_camellia.hh"
-#include "libaan/crypto_file.hh"
 #include "libaan/crypto_util.hh"
 #include "libaan/file_util.hh"
 #include "libaan/terminal_util.hh"
 #include "libaan/x11_util.hh"
 
-namespace {
+#include "pwstore.hh"
+#include "pwstore_api_cxx.hh"
 
-struct config_type {
-    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP, LOOKUP, REMOVE, CHANGE_PASSWD, GEN_PASSWD } mode;
-    bool interactive;
-    std::string lookup_key;
-    std::vector<pw_store::data_type::id_type> uids;
-    std::string db_file;
-    std::function<bool(const std::string &)> provide_value_to_user;
-};
+namespace {
 
 #ifndef NO_GOOD
 const std::string DEFAULT_CIPHER_DB = ".pwstore.crypt";
@@ -57,6 +48,16 @@ void sigint_handler(int signum)
     if (signum == SIGINT)
         SIGINT_CAUGHT = true;
 }
+
+struct config_type {
+    enum { ADD, DUMP, INIT, INTERACTIVE_ADD, INTERACTIVE_LOOKUP,
+           LOOKUP, REMOVE, CHANGE_PASSWD, GEN_PASSWD } mode;
+    bool interactive;
+    std::string lookup_key;
+    std::vector<pw_store::data_type::id_type> uids;
+    std::string db_file;
+    std::function<bool(const std::string &)> provide_value_to_user;
+};
 
 
 std::list<pw_store::data_type> test_data = {
@@ -85,95 +86,15 @@ bool read_data_from_stdin(pw_store::data_type &date)
     return true;
 }
 
-class encrypted_pwstore
+// small cli-layer over pw_store_api_cxx
+bool add(pw_store_api_cxx::pwstore_api &db)
 {
-public:
-    // open/create database in file db_file.
-    encrypted_pwstore(const std::string &db_file, const std::string &password)
-        : crypto_file(new libaan::crypto::file::crypto_file(db_file)),
-          password(password)
-    {
-        db = load_db();
-    }
-
-    ~encrypted_pwstore()
-    {
-        std::fill(std::begin(password), std::end(password), 0);
-    }
-
-    // better check this before using get() method
-    operator bool() const { return db != 0; }
-
-    // next call to sync will reencrypt the database with the new password
-    void change_password(const std::string &pw) { password.assign(pw); }
-
-    bool sync() { return sync_and_write_db(); }
-
-    pw_store::database &get() { return *db; }
-
-private:
-    bool sync_and_write_db()
-    {
-        if(!db || !crypto_file)
-            return false;
-        using namespace libaan::crypto::file;
-        db->synchronize_buffer();
-        const auto err = crypto_file->write(password);
-        if (err != crypto_file::NO_ERROR) {
-            std::cerr << "Writing database to disk failed. Error: "
-                      << crypto_file::error_string(err) << "\n";
-            return false;
-        }
-
-        return true;
-    }
-
-    std::unique_ptr<pw_store::database> load_db()
-    {
-        if(!crypto_file)
-            return nullptr;
-
-        using namespace libaan::crypto::file;
-
-        // Read encrypted database with provided password.
-        auto err = crypto_file->read(password);
-        if(err != crypto_file::NO_ERROR) {
-            std::cerr << "Error deciphering database. Wrong key? ("
-                      << crypto_file::error_string(err) << ")\n";
-            return nullptr;
-        }
-
-        // The only reason for not using an automatic variable for db per function
-        // is to avoid duplicate code..
-        // Better to be replaced with a class.
-        std::unique_ptr<pw_store::database> db(
-            new pw_store::database(crypto_file->get_decrypted_buffer()));
-        if(!db->parse()) {
-            std::cerr << "Error: corrupt database file.\n";
-            return nullptr;
-        }
-
-        return db;
-    }
-
-private:
-    std::unique_ptr<libaan::crypto::file::crypto_file> crypto_file;
-    std::unique_ptr<pw_store::database> db;
-    std::string password;
-};
-
-bool add(const config_type &config, const std::string &db_password)
-{
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
     pw_store::data_type date;
     if(!read_data_from_stdin(date)) {
         std::cerr << "Error reading data from stdin.\n";
         return false;
     }
-    if(!db.get().insert(date)) {
+    if(!db.add(date)) {
         std::cerr << "Error: inserting in database failed.\n";
         return false;
     }
@@ -181,56 +102,26 @@ bool add(const config_type &config, const std::string &db_password)
     return db.sync();
 }
 
-bool lookup(const config_type &config, const std::string &db_password)
+bool lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
-    if(config.uids.size()) {
-        pw_store::data_type data;
-        const auto ret = db.get().get(config.uids.front(), data);
-        if(ret) {
-            if(!config.provide_value_to_user(data.password))
-                return false;
-        }
-        return ret;
-    }
-
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
         matches;
-    db.get().lookup(config.lookup_key, matches);
+    db.lookup(matches, config.provide_value_to_user, config.lookup_key, config.uids);
     for(const auto &match: matches)
         std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
-    return true;
-}
-
-// needs non-const config_type since remove sorts the uid vector
-bool remove(config_type &config, const std::string &db_password)
-{
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
-    if(config.uids.size() == 1) {
-        if(!db.get().remove(config.uids.front()))
-            return false;
-    } else if(config.uids.size() > 1) {
-        if(!db.get().remove(config.uids))
-            return false;
-    } else
-        return false;
-
     return db.sync();
 }
 
-bool change_passwd(const config_type &config, const std::string &db_password)
+// needs non-const config_type since remove sorts the uid vector
+bool remove(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
+    db.remove(config.uids);
+    return db.sync();
+}
 
+bool change_passwd(pw_store_api_cxx::pwstore_api &db)
+{
     const libaan::crypto::util::password_from_stdin db_password_new(2);
     if(!db_password_new) {
         std::cerr << "Password Error. Too short?\n";
@@ -241,69 +132,33 @@ bool change_passwd(const config_type &config, const std::string &db_password)
     return db.sync();
 }
 
-bool gen_passwd(const config_type &config, const std::string &db_password)
+    bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
-    pw_store::data_type date;
+    std::string url_string, username;
     std::cout << "Url:\n";
-    std::getline(std::cin, date.url_string);
+    std::getline(std::cin, url_string);
     std::cout << "User:\n";
-    std::getline(std::cin, date.username);
+    std::getline(std::cin, username);
 
-    if(!date.url_string.length() && !date.username.length()) {
-        std::cerr << "Error: creating a password for an empty"
-                     "key does not make sense.\n       How would"
-                     "you retrieve it? Aborting.\n";
-        return false;
-    }
-
-    std::string ascii_set;
-    for(int i = 0; i < 255; i++)
-        if(isprint(i))
-            ascii_set.push_back(char(i));
-    if(!libaan::crypto::read_random_ascii_set(12, ascii_set, date.password)) {
-        std::cerr << "Error creating a password from random data. Aborting.\n";
-        return false;
-    }
-
-    if(!db.get().insert(date)) {
-        std::cerr << "Error: inserting in database failed.\n";
-        return false;
-    }
-
-    std::cout << "Created and stored key for: " << date << ".\n";
-    if(!config.provide_value_to_user(date.password))
-        return false;
-    std::cout << date << " -> copied to x11 clipboard.\n";
+    db.gen_passwd(username, url_string, config.provide_value_to_user);
 
     return db.sync();
 }
 
-bool dump(const config_type &config, const std::string &db_password)
+bool dump(const pw_store_api_cxx::pwstore_api &db)
 {
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
     std::cout << "Database dump:\n";
-    db.get().dump_db();
+    db.dump();
 
     return true;
 }
 
 // Test pwstore with example data.
-bool init(const config_type &config, const std::string &db_password)
+bool init(pw_store_api_cxx::pwstore_api &db)
 {
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
-
     // set content
     for(const auto &date: test_data)
-        if(!db.get().insert(date)) {
+        if(!db.add(date)) {
             std::cerr << "Error: inserting in database failed.\n";
             return false;
         }
@@ -311,7 +166,7 @@ bool init(const config_type &config, const std::string &db_password)
     return db.sync();
 }
 
-bool interactive_add(const config_type &config, const std::string &db_password)
+bool interactive_add(pw_store_api_cxx::pwstore_api &db)
 {
 // iterate and wait for input until eof.
 // read in data just like in add()
@@ -334,7 +189,7 @@ const std::string ui_last_command_suffix = "\"\n";
 const std::string ui_last_accumulate_prefix = "  (Command)       id = \"";
 const std::string ui_last_accumulate_suffix = "\"\n";
 
-bool interactive_lookup(const config_type &config, const std::string &db_password)
+bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     struct raii {
         raii() { libaan::util::terminal::alternate_screen_on(); }
@@ -345,10 +200,6 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
         }
         std::string print_after_terminal_reset;
     } raii;
-
-    encrypted_pwstore db(config.db_file, db_password);
-    if(!db)
-        return false;
 
     //get user input async
     // TODO: select would be better, but 100ms cycletime works
@@ -425,7 +276,7 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
                         pw_store::data_type::id_type id =
                             std::strtol(accumulate.c_str(), nullptr, 10);
                         pw_store::data_type date;
-                        if(db.get().get(id, date)) {
+                        if(db.get(id, date)) {
                             if(config.provide_value_to_user(date.password))
                                 std::cout << "Retrieved value for <id> " << id << ".\n";
                             // should be false at the moment
@@ -478,7 +329,7 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
             last_lookup.clear();
             std::list<std::tuple<pw_store::data_type::id_type,
                                  pw_store::data_type>> matches;
-            db.get().lookup(input, matches);
+            db.lookup(matches, config.provide_value_to_user, input, config.uids);
             for(const auto &match: matches)
                 last_lookup.append(std::to_string(std::get<0>(match))
                                    + std::get<1>(match).to_string() + "\n");
@@ -488,7 +339,7 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
         {
             gui(bool help, const state_type &state, const std::string &key,
                 const std::string &last_lookup, const std::string &accumulate,
-                bool dump_db, const pw_store::database &db)
+                bool dump_db, const pw_store_api_cxx::pwstore_api &db)
                 : help(help),
                   state(state),
                   key(key),
@@ -516,7 +367,7 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
                 std::cout << SEP;
                 std::cout << last_lookup << (last_lookup.length() ? SEP : "");
                 if(dump_db)
-                    db.dump_db();
+                    dump(db);
             }
             bool help;
             const state_type &state;
@@ -524,9 +375,8 @@ bool interactive_lookup(const config_type &config, const std::string &db_passwor
             const std::string &last_lookup;
             const std::string &accumulate;
             bool dump_db;
-            const pw_store::database &db;
-        } gui(show_help, state, input, last_lookup, accumulate, dump_db,
-              db.get());
+            const pw_store_api_cxx::pwstore_api &db;
+        } gui(show_help, state, input, last_lookup, accumulate, dump_db, db);
     }
 
     return db.sync();
@@ -539,34 +389,38 @@ bool run(config_type config)
         std::cerr << "Password Error. Too short?\n";
         return false;
     }
+    pw_store_api_cxx::pwstore_api db(config.db_file, db_password);
+    if(!db)
+        return false;
+
     bool ret = true;
     switch(config.mode) {
     case config_type::ADD:
-        ret = add(config, db_password);
+        ret = add(db);
         break;
     case config_type::DUMP:
-        ret = dump(config, db_password);
+        ret = dump(db);
         break;
     case config_type::INIT:
-        ret = init(config, db_password);
+        ret = init(db);
         break;
     case config_type::INTERACTIVE_ADD:
-        ret = interactive_add(config, db_password);
+        ret = interactive_add(db);
         break;
     case config_type::INTERACTIVE_LOOKUP:
-        ret = interactive_lookup(config, db_password);
+        ret = interactive_lookup(db, config);
         break;
     case config_type::LOOKUP:
-        ret = lookup(config, db_password);
+        ret = lookup(db, config);
         break;
     case config_type::REMOVE:
-        ret = remove(config, db_password);
+        ret = remove(db, config);
         break;
     case config_type::CHANGE_PASSWD:
-        ret = change_passwd(config, db_password);
+        ret = change_passwd(db);
         break;
     case config_type::GEN_PASSWD:
-        ret = gen_passwd(config, db_password);
+        ret = gen_passwd(db, config);
         break;
     }
 

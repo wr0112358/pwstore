@@ -86,7 +86,7 @@ Usage
   Extract a password:
   ./pwstore lookup -n <uid>
   Or in interactive mode:
-  C-x n <uid>
+  <Enter> <uid> <Enter>
 
   Remove a key:
   ./pwstore remove -n 1
