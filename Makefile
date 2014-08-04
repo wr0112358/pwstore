@@ -22,8 +22,8 @@ pwstore: $(objects_pwstore)
 #	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(LDFLAGS) $^ -o $(APP)
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $^ -o $(APP) $(LDFLAGS)
 
-clean :
-	rm -f *.o pwstore pwstore.exe
+clean:
+	rm -f *.o pwstore pwstore.exe *.a test_c
 
 install: pwstore
 	cp pwstore $(INSTALL_BIN_DIR)

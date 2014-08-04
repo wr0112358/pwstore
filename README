@@ -5,6 +5,8 @@ Work in progress. But in use and working.
 Missing/Bugs
   o general:
     rethink data structure and uid.
+    interactive add is missing.
+    some command to dump pws to stdout in cleartext necessary?
 
   o x11 clipboard algorithm
     Windows equivalent?
@@ -32,25 +34,15 @@ Missing/Bugs
   o windows:
     crypto backend needs RNG. see comment.
     interactive lookup not working yet. port terminal_util.hh
+    build/install instructions
 
 # first real usage revealed:
-
-dump -o should dump pws in cleartext too
-
-add -i
 
 all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
 
 auto resize terminal, so that it works at least for me under awesome wm
 
-add build instructions for windows and used deps to this file
-
-add howto for usage:
-    awful.key({ ctrlkey, }, "2", function () awful.util.spawn("urxvt256c -e /opt/usr/bin/pwstore -f DB_FILE lookup -i") end),
-
 timeout for interactive mode, after which pw must be reentered?
-
-print keys without "'s around it, so copy/paste is easier.
 
 new mode for lookup, that is enabled by cmdline flag or by a command_option in interactive mode:
   copy first username and if successfull copy password!
@@ -89,3 +81,20 @@ Get it
   Recursive clone, to get the deps too.
   git clone --recursive <this-repo>
   make pwstore
+
+
+Installation
+  su --command="make install"
+
+  After installation it is recommended to add a short-cut key for
+  interactive lookup. Examples to use C-2 as shortcut under:
+  For awsome wm add to .config/awesome/rc.lua:
+    awful.key({ ctrlkey, }, "2", function () awful.util.spawn("urxvt256c -e /opt/usr/bin/pwstore -f DB_FILE lookup -i") end),
+    And restart with: META-C-r
+  For openbox-lxde add to ~/.config/openbox/lxde-rc.xml:
+    <keybind key="C-1">
+      <action name="Execute">
+          <command>/opt/usr/bin/open_shell_in_cwd_of</command>
+      </action>
+    </keybind>
+    And restart with: $ openbox-lxde --reconfigure

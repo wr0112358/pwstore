@@ -722,6 +722,7 @@ int main(int argc, char *argv[])
     case config_type::DUMP:
     case config_type::INTERACTIVE_LOOKUP:
     case config_type::LOOKUP:
+    case config_type::GET:
         break;
     case config_type::ADD:
     case config_type::INIT:
