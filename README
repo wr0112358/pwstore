@@ -38,10 +38,6 @@ Missing/Bugs
 
 # first real usage revealed:
 
-all of the modyfying commands should be interruptible!(lookup and x11 thingy too!)
-
-auto resize terminal, so that it works at least for me under awesome wm
-
 timeout for interactive mode, after which pw must be reentered?
 
 new mode for lookup, that is enabled by cmdline flag or by a command_option in interactive mode:

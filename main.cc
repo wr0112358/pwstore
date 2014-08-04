@@ -43,10 +43,14 @@ const std::string DEFAULT_CIPHER_DB = ".pwstore.crypt";
 
 
 bool SIGINT_CAUGHT = false;
+bool exit_on_sigint = false;
 void sigint_handler(int signum)
 {
-    if (signum == SIGINT)
+    if (signum == SIGINT) {
+        if(exit_on_sigint)
+            exit(EXIT_FAILURE);
         SIGINT_CAUGHT = true;
+    }
 }
 
 struct config_type {
@@ -70,12 +74,35 @@ std::list<pw_store::data_type> test_data = {
     {"mail.google.de", "gm_user3", "pw6" },
 };
 
-bool read_data_from_stdin(pw_store::data_type &date)
+bool read_until(const int end_char, std::string &accumulate)
 {
+    libaan::util::rawmode tty_raw;
+    while (true) {
+        const auto in = tty_raw.getch();
+        if ((in == CTRL('x')) || (in == CTRL('g'))) {
+            accumulate.clear();
+            std::cerr << "\n..exiting.\n";
+            return false;
+        } else if (in == end_char) {
+            return true;
+        } else if(isdigit(in)) {
+            accumulate.push_back(static_cast<char>(in));
+        }
+        std::cout << char(in) << std::flush;
+    }
+}
+
+// small cli-layer over pw_store_api_cxx
+bool add(pw_store_api_cxx::pwstore_api &db)
+{
+    pw_store::data_type date;
+
     std::cout << "Url:\n";
-    std::getline(std::cin, date.url_string);
+    if(!read_until('\n', date.url_string))
+        return false;
     std::cout << "User:\n";
-    std::getline(std::cin, date.username);
+    if(!read_until('\n', date.username))
+        return false;
 
     const libaan::crypto::util::password_from_stdin password(0);
     if(!password) {
@@ -84,17 +111,7 @@ bool read_data_from_stdin(pw_store::data_type &date)
     }
     date.password = password.password;
 
-    return true;
-}
 
-// small cli-layer over pw_store_api_cxx
-bool add(pw_store_api_cxx::pwstore_api &db)
-{
-    pw_store::data_type date;
-    if(!read_data_from_stdin(date)) {
-        std::cerr << "Error reading data from stdin.\n";
-        return false;
-    }
     if(!db.add(date)) {
         std::cerr << "Error: inserting in database failed.\n";
         return false;
@@ -147,8 +164,10 @@ bool remove(pw_store_api_cxx::pwstore_api &db, config_type &config)
         const auto in = tty_raw.getch();
         // abort if anything except Y was entered
         //if(!(in == 'y' || in == 'Y'))
-        if(in != 'Y')
+        if(in != 'Y') {
+            std::cout << "Aborted. Nothing removed.\n";
             return false;
+        }
     }
 
     if(!db.remove(config.uids))
@@ -173,9 +192,11 @@ bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     std::string url_string, username;
     std::cout << "Url:\n";
-    std::getline(std::cin, url_string);
+    if(!read_until('\n', url_string))
+        return false;
     std::cout << "User:\n";
-    std::getline(std::cin, username);
+    if(!read_until('\n', username))
+        return false;
 
     std::string password;
     if(!db.gen_passwd(username, url_string, password))
@@ -681,6 +702,7 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
             }
             return true;
         };
+        exit_on_sigint = true;
 #else
         return false;
 #endif
