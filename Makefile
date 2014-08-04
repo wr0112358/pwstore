@@ -6,8 +6,8 @@ APP=pwstore
 INSTALL_BIN_DIR=/opt/usr/bin
 INSTALL_SHARE_DIR=/opt/usr/share
 
-#INCLUDES=-I.deps/
-INCLUDES=-I..
+INCLUDES=-I.deps/
+#INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc pwstore_api_c.cc
