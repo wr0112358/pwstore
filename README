@@ -4,14 +4,19 @@ Work in progress. But in use and working.
 
 Missing/Bugs
   o general:
-    rethink data structure and uid.
-    interactive add is missing.
-    some command to dump pws to stdout in cleartext necessary?
+    Rethink data structure and uid.
+    Interactive add is missing.
+    Some command to dump pws to stdout in cleartext necessary?
+    New mode for lookup, that is enabled by cmdline flag or by a command_option
+    in interactive mode: copy first username and if successfull copy password.
+    (Provide option to copy first username, then after selection request the
+    password.)
+    Backup files are nice, but too many of them keep are created. Commandline
+    flag to delete some/all.
+    Show changes made since a specific backup file. (history functionality)
 
   o x11 clipboard algorithm
     Windows equivalent?
-    Provide option to copy first username, then after selection request the
-    password.
     What todo in a ssh session?
 
   o cli:
@@ -35,16 +40,6 @@ Missing/Bugs
     crypto backend needs RNG. see comment.
     interactive lookup not working yet. port terminal_util.hh
     build/install instructions
-
-# first real usage revealed:
-
-new mode for lookup, that is enabled by cmdline flag or by a command_option
-in interactive mode: copy first username and if successfull copy password.
-
-backup files are nice, but kinda too many of them keep floating around..
-  commandline flag to delete some/all.
-  show changes made since a specific backup file. (history functionality)
-#
 
 Usage
   Add some data:

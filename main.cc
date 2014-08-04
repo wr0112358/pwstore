@@ -74,7 +74,7 @@ std::list<pw_store::data_type> test_data = {
     {"mail.google.de", "gm_user3", "pw6" },
 };
 
-bool read_until(const int end_char, std::string &accumulate)
+bool read_until(const std::list<int> &end_char, std::string &accumulate)
 {
     libaan::util::rawmode tty_raw;
     while (true) {
@@ -83,11 +83,11 @@ bool read_until(const int end_char, std::string &accumulate)
             accumulate.clear();
             std::cerr << "\n..exiting.\n";
             return false;
-        } else if (in == end_char) {
+        } else if(std::find(std::begin(end_char), std::end(end_char), in) != std::end(end_char))
             return true;
-        } else if(isdigit(in)) {
+        else if(isalnum(in))
             accumulate.push_back(static_cast<char>(in));
-        }
+
         std::cout << char(in) << std::flush;
     }
 }
@@ -98,10 +98,10 @@ bool add(pw_store_api_cxx::pwstore_api &db)
     pw_store::data_type date;
 
     std::cout << "Url:\n";
-    if(!read_until('\n', date.url_string))
+    if (!read_until({'\n', '\r'}, date.url_string))
         return false;
     std::cout << "User:\n";
-    if(!read_until('\n', date.username))
+    if(!read_until({'\n', '\r' }, date.username))
         return false;
 
     const libaan::crypto::util::password_from_stdin password(0);
@@ -116,6 +116,8 @@ bool add(pw_store_api_cxx::pwstore_api &db)
         std::cerr << "Error: inserting in database failed.\n";
         return false;
     }
+
+    std::cout << "added: " << date << "\n";
 
     return db.sync();
 }
@@ -139,10 +141,13 @@ bool get(pw_store_api_cxx::pwstore_api &db, config_type &config)
         std::cerr << "Could not retrieve datum with id: " << config.uids.front() << ".\n";
         return false;
     }
+    exit_on_sigint = true;
     if(!config.provide_value_to_user(date.password)) {
         std::cerr << "Could not retrieve datum with id: " << config.uids.front() << ".\n";
+        exit_on_sigint = false;
         return false;
     }
+    exit_on_sigint = false;
     std::cout << "Retrieved value for <id> " << config.uids.front() << ".\n";
     return true;
 }
@@ -153,7 +158,7 @@ bool remove(pw_store_api_cxx::pwstore_api &db, config_type &config)
     if(!config.force) {
         libaan::util::rawmode tty_raw;
 
-        // if sth is available from stding, discard it.
+        // if sth is available from stdin, discard it.
         while (tty_raw.kbhit())
             tty_raw.getch();
 
@@ -193,10 +198,10 @@ bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
     std::string url_string, username;
     std::cout << "Url:\n";
-    if(!read_until('\n', url_string))
+    if(!read_until({'\n', '\r' }, url_string))
         return false;
     std::cout << "User:\n";
-    if(!read_until('\n', username))
+    if(!read_until({'\n', '\r' }, username))
         return false;
 
     std::string password;
@@ -204,7 +209,9 @@ bool gen_passwd(pw_store_api_cxx::pwstore_api &db, config_type &config)
         return false;
 
     std::cout << "Generated and stored password. Retrieving password..\n";
+    exit_on_sigint = true;
     config.provide_value_to_user(password);
+    exit_on_sigint = false;
     return db.sync();
 }
 
@@ -352,14 +359,16 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
                     if (change && state != ACCUMULATE)
                         state = NORMAL;
                 } else if (state == ACCUMULATE) {
-                    if (in == '\n') {
+                    if (in == '\n' || in == '\r') {
                         pw_store::data_type::id_type id =
                             std::strtol(accumulate.c_str(), nullptr, 10);
                         pw_store::data_type date;
                         if (db.get(id, date)) {
+                            exit_on_sigint = true;
                             if (config.provide_value_to_user(date.password))
                                 std::cout << "Retrieved value for <id> " << id
                                           << ".\n";
+                            exit_on_sigint = false;
                         } else
                             change = true;
                         accumulate.clear();
@@ -374,7 +383,12 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
                     } else if (in == CTRL('x'))
                         terminate = true;
                 } else if (state == NORMAL) {
-                    if (in == '\n') {
+                    if (in == 127) {
+                        if(input.length()) {
+                            input.resize(input.length() - 1);
+                            change = true;
+                        }
+                    } else if (in == '\n' || in == '\r') {
                         state = COMMAND;
                         change = true;
                     } else if (isgraph(in))
@@ -385,22 +399,21 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
                         dump_db = false;
                     } else if (in == CTRL('x'))
                         terminate = true;
-
                     if (!ignore) {
                         input.push_back(static_cast<char>(in));
                         change = true;
                     }
                 }
             }
-        }
 
-        if(!change) {
+            if(!change) {
 #ifdef NO_GOOD
-            usleep(dura.count() * 1000);
+                usleep(dura.count() * 1000);
 #else
-            std::this_thread::sleep_for(dura);
+                std::this_thread::sleep_for(dura);
 #endif
-            continue;
+                continue;
+            }
         }
 
         time_of_last_change = std::chrono::high_resolution_clock::now();
@@ -726,7 +739,6 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
             }
             return true;
         };
-        exit_on_sigint = true;
 #else
         return false;
 #endif
