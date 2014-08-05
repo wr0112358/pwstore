@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 bool pw_store::database::parse()
 {
+    urluserpw.clear();
     line_count = 0;
     if (!string_buffer.size())
         return true;
@@ -49,6 +50,9 @@ bool pw_store::database::parse()
         insert(date);
         ++line_count;
     }
+
+    dirty = false;
+
     return true;
 }
 

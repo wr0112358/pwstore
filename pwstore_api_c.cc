@@ -66,6 +66,8 @@ static void convert(const size_t *from, size_t from_length,
 pwstore_handle pwstore_create(const char *password, size_t password_length,
                               const char *db_file, size_t db_file_length)
 {
+    (void)password_length;
+    (void)db_file_length;
     pwstore_c *obj = new pwstore_c;
     obj->db = new pw_store_api_cxx::pwstore_api(std::string(db_file),
                                                 std::string(password));
@@ -95,6 +97,7 @@ bool pwstore_lookup(pwstore_handle handle, struct dataset **matches,
                     const char *lookup_key, size_t lookup_key_length,
                     size_t *uids, size_t uids_length)
 {
+    (void)lookup_key_length;
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
     std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> matches_cxx;
 
@@ -152,6 +155,7 @@ bool pwstore_remove_one(pwstore_handle handle, size_t uid)
 bool pwstore_change_password(pwstore_handle handle, const char *new_password,
                              size_t new_password_length)
 {
+    (void)new_password_length;
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
 
     return obj->db->change_password(std::string(new_password));

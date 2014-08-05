@@ -32,6 +32,7 @@ public:
         : crypto_file(new libaan::crypto::file::crypto_file(db_file)),
           password(password)
     {
+        locked = true;
         db = load_db();
     }
 
@@ -48,6 +49,7 @@ public:
 
     bool sync() { return sync_and_write_db(); }
 
+    // better don't call these
     pw_store::database &get() { return *db; }
     const pw_store::database &get() const { return *db; }
 
@@ -55,6 +57,8 @@ public:
     // sync() should be called before.
     void lock();
     bool unlock(const std::string &passwd);
+    bool is_locked() const { return locked; }
+    bool is_dirty() const { if(!db) return false; return db->is_dirty(); }
 
 private:
     bool sync_and_write_db();
@@ -64,6 +68,7 @@ private:
     std::unique_ptr<libaan::crypto::file::crypto_file> crypto_file;
     std::unique_ptr<pw_store::database> db;
     std::string password;
+    bool locked;
 };
 
 class pwstore_api
@@ -92,6 +97,9 @@ public:
     bool sync();
     void lock();
     bool unlock(const std::string &password);
+
+    bool dirty() const { return db.is_dirty(); }
+    bool locked() const { return db.is_locked(); }
 
     operator bool() const { return state; }
 

@@ -236,7 +236,7 @@ bool init(pw_store_api_cxx::pwstore_api &db)
     return db.sync();
 }
 
-bool interactive_add(pw_store_api_cxx::pwstore_api &db)
+bool interactive_add(pw_store_api_cxx::pwstore_api &)
 {
 // iterate and wait for input until eof.
 // read in data just like in add()
@@ -275,7 +275,7 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
     //       good enough for now and does not seem to have much
     //       cpu impact.
     const std::chrono::milliseconds dura(150);
-    const size_t DEFAULT_TIMEOUT_SECS = 20;
+    const long DEFAULT_TIMEOUT_SECS = 20;
     auto time_of_last_change = std::chrono::high_resolution_clock::now();
 
     std::string input;
@@ -529,7 +529,7 @@ bool run(config_type config)
     return ret;
 }
 
-void usage(int argc, char *argv[])
+void usage(int, char *argv[])
 {
     std::cout << "Usage: " << argv[0] << " [flags] command [optional-key]\n\n"
               << "  possible flags are:\n"
@@ -594,6 +594,7 @@ bool backup_db(const std::string &db_file)
 
     auto const lambda = [&base, &count_backup_files](const std::string &path,
                                                      const struct dirent *p) {
+        (void)path;
         const std::string entry(p->d_name);
         if(!std::equal(base.begin(), base.end(), entry.begin()))
             return;

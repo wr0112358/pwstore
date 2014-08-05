@@ -125,6 +125,9 @@ public:
     }
 
     void dump_db() const;
+
+    bool is_dirty() const { return dirty; }
+
 private:
 
     using tuple_type = std::tuple<std::string, std::string, std::string>;
