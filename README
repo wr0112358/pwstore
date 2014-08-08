@@ -5,6 +5,17 @@ Work in progress. But in use and working.
 Missing/Bugs
   o general:
     Rethink data structure and uid.
+    Show changes made since a specific backup file. (history functionality)
+    grep -n \(void\) . *
+    grep -ni todo . *
+
+  o x11 clipboard algorithm/qt clipboard
+    This won't work in a ssh session?
+
+  o cli:
+    Disabling ECHO in termios settings has no effect.
+    Alternate mode does not clear the screen correctly using ssh in cygwin
+    terminal.
     Interactive add is missing.
     Some command to dump pws to stdout in cleartext necessary?
     New mode for lookup, that is enabled by cmdline flag or by a command_option
@@ -13,28 +24,6 @@ Missing/Bugs
     password.)
     Backup files are nice, but too many of them keep are created. Commandline
     flag to delete some/all.
-    Show changes made since a specific backup file. (history functionality)
-
-  o x11 clipboard algorithm
-    Windows equivalent?
-    What todo in a ssh session?
-
-  o cli:
-    Disabling ECHO in termios settings has no effect.
-    select instead of busy wait.
-
-    Alternate mode does not clear the screen correctly using ssh in cygwin
-    terminal.
-
-  o point&click gui:
-    python/tk + boost python?
-    needs some refactoring:
-      reencryption for every operation is not feasible. Move all methods
-      add/lookup/.. to a class that saves the current state(=crypto file
-      and db).
-    display all entries per dflt
-    filter entries with partial string search on user input
-    select entry with double click -> copy pw in copypaste-buffer
 
   o windows:
     crypto backend needs RNG. see comment.

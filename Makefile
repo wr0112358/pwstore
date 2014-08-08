@@ -1,5 +1,5 @@
 CXX=clang++
-CXX_FLAGS=-std=c++11 -g -Wall -Werror 
+CXX_FLAGS=-std=c++11 -g -Wall -Werror -Weffc++  -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic
 DEFINES=
 APP=pwstore
 
@@ -22,7 +22,7 @@ pwstore: $(objects_pwstore)
 #	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(LDFLAGS) $^ -o $(APP)
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $^ -o $(APP) $(LDFLAGS)
 
-clean:
+clean: clean_gui_qt
 	rm -f *.o pwstore pwstore.exe *.a test_c
 
 install: pwstore
@@ -55,3 +55,13 @@ test_c_prog: test_c_api.o
 	gcc -lstdc++ test_c_api.c -o test_c $(LDFLAGS) test_lib.a
 
 test_c: test_c_lib test_c_prog
+
+QMAKE:=/opt/qt/5.2.1/gcc_64/bin/qmake
+gui_qt_create:
+	(cd gui_qt; $(QMAKE) -makefile)
+
+gui_qt: gui_qt_create
+	make -j 16 -C gui_qt/
+
+clean_gui_qt:
+	make -C gui_qt/ distclean

@@ -59,6 +59,7 @@ std::unique_ptr<pw_store::database> pw_store_api_cxx::encrypted_pwstore::load_db
         return nullptr;
     }
 
+    locked = false;
     return db;
 }
 
@@ -67,13 +68,17 @@ void pw_store_api_cxx::encrypted_pwstore::lock()
     std::fill(std::begin(password), std::end(password), 0);
     db.reset(nullptr);
     crypto_file->clear_buffers();
+    locked = true;
 }
 
 bool pw_store_api_cxx::encrypted_pwstore::unlock(const std::string &passwd)
 {
     password.assign(passwd);
     db = load_db();
-    return db != nullptr;
+    if(db == nullptr)
+        return false;
+
+    return true;
 }
 
 bool pw_store_api_cxx::pwstore_api::add(const pw_store::data_type &date)
