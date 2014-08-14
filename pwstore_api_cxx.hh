@@ -23,7 +23,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "pwstore.hh"
 
-namespace pw_store_api_cxx {
+#include <memory>
+
+namespace pw_store_api_cxx
+{
 class encrypted_pwstore
 {
 public:
@@ -58,7 +61,12 @@ public:
     void lock();
     bool unlock(const std::string &passwd);
     bool is_locked() const { return locked; }
-    bool is_dirty() const { if(!db) return false; return db->is_dirty(); }
+    bool is_dirty() const
+    {
+        if(!db)
+            return false;
+        return db->is_dirty();
+    }
 
 private:
     bool sync_and_write_db();
@@ -81,18 +89,30 @@ public:
     }
 
     bool add(const pw_store::data_type &date);
-    // lookup all entries matching lookup_key or an uid from uids. either of them may be empty.
-    bool lookup(std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> &matches,
+    // lookup all entries matching lookup_key or an uid from uids. either of
+    // them may be empty.
+    bool lookup(std::list<std::tuple<pw_store::data_type::id_type,
+                                     pw_store::data_type>> &matches,
                 const std::string &lookup_key,
                 const std::vector<pw_store::data_type::id_type> &uids);
-    bool get(const pw_store::data_type::id_type &uid, pw_store::data_type &date);
+    bool get(const pw_store::data_type::id_type &uid,
+             pw_store::data_type &date);
     bool remove(std::vector<pw_store::data_type::id_type> &uids);
 
     bool change_password(const std::string &new_password);
+
+    // Generate a password with pseudorandom numbers and store it in password
+    // argument. If insert_generated is true, an entry containing the arguments
+    // is inserted in the database.
+    // To use only specific characters for the generated password use the
+    // ascii_set argument. Per default all characters that match isprint(3) are
+    // used.
+    // Default password size is 12 characters.
     bool gen_passwd(const std::string &username, const std::string &url_string,
-                    std::string &password);
-    // TODO: dump should just do an empty lookup and return all
-    bool dump() const;
+                    std::string &password, bool insert_generated = true,
+                    const std::string &ascii_set = "");
+    bool dump(std::list<std::tuple<pw_store::data_type::id_type,
+                                   pw_store::data_type>> &content) const;
 
     bool sync();
     void lock();
@@ -107,8 +127,6 @@ private:
     bool state;
     encrypted_pwstore db;
 };
-
 }
 
 #endif
-

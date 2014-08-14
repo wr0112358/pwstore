@@ -1,34 +1,12 @@
 Password Storage With OpenSSL Backed Cryptography
 
-Work in progress. But in use and working.
+Work in progress.
 
-Missing/Bugs
-  o general:
-    Rethink data structure and uid.
-    Show changes made since a specific backup file. (history functionality)
-    grep -n \(void\) . *
-    grep -ni todo . *
+Store existing or generated passwords together with url and username
+in an encrypted database.
+Access to database is provided by a command line tools and through a
+qt gui. Fast lookup of keys/values with partial string matching.
 
-  o x11 clipboard algorithm/qt clipboard
-    This won't work in a ssh session?
-
-  o cli:
-    Disabling ECHO in termios settings has no effect.
-    Alternate mode does not clear the screen correctly using ssh in cygwin
-    terminal.
-    Interactive add is missing.
-    Some command to dump pws to stdout in cleartext necessary?
-    New mode for lookup, that is enabled by cmdline flag or by a command_option
-    in interactive mode: copy first username and if successfull copy password.
-    (Provide option to copy first username, then after selection request the
-    password.)
-    Backup files are nice, but too many of them keep are created. Commandline
-    flag to delete some/all.
-
-  o windows:
-    crypto backend needs RNG. see comment.
-    interactive lookup not working yet. port terminal_util.hh
-    build/install instructions
 
 Usage
   Add some data:
@@ -43,9 +21,13 @@ Usage
   ./pwstore -i lookup
 
   Extract a password:
-  ./pwstore lookup -n <uid>
+  ./pwstore get -n <uid>
   Or in interactive mode:
   <Enter> <uid> <Enter>
+
+  Extract a password and dump to stdout instead of x11 selection
+  buffer/qt clipboard:
+  ./pwstore -o get -n <uid>
 
   Remove a key:
   ./pwstore remove -n 1
@@ -67,7 +49,13 @@ Installation
   After installation it is recommended to add a short-cut key for
   interactive lookup. Examples to use C-2 as shortcut under:
   For awsome wm add to .config/awesome/rc.lua:
-    awful.key({ ctrlkey, }, "2", function () awful.util.spawn("urxvt256c -e /opt/usr/bin/pwstore -f DB_FILE lookup -i") end),
+
+    awful.key({ ctrlkey, }, "2",
+              function()
+	      awful.util.spawn(
+	      "urxvt256c -e /opt/usr/bin/pwstore -f DB_FILE lookup -i"
+	      ) end),
+
     And restart with: META-C-r
   For openbox-lxde add to ~/.config/openbox/lxde-rc.xml:
     <keybind key="C-1">
@@ -76,3 +64,48 @@ Installation
       </action>
     </keybind>
     And restart with: $ openbox-lxde --reconfigure
+
+
+Missing/Bugs
+  o gui:
+    show last opened db as clickable string if no db is open
+    close button
+    file open dialog->no or sensible filter
+
+  o authenticity & integrity:
+    integrate mac. and show info on startup: last modification, and info why this is shown.
+
+  o general:
+    Rethink data structure and uid.
+    Show changes made since a specific backup file. (history functionality)
+    grep -n \(void\) . *
+    grep -ni todo . *
+
+  o x11 clipboard algorithm/qt clipboard
+    This won't work in a ssh session.
+
+  o cli:
+    Disabling ECHO in termios settings has no effect.
+    Alternate mode does not clear the screen correctly using ssh in cygwin
+    terminal.
+    Interactive add is missing.
+    - New mode for lookup, that is enabled by cmdline flag or by a command_option
+      in interactive mode: copy first username and if successfull copy password.
+      (Provide option to copy first username, then after selection request the
+      password.)
+    - Backup files are nice, but too many of them keep are created. Commandline
+      flag to delete some/all.
+
+  o windows:
+    - Interactive lookup not working yet. port terminal_util.hh
+    - Build/install instructions
+    - Integrate get.bat get.PS1 as install and update scripts, that
+      fetch the most recent stable version from binary server
+    - Script to upload latest stable binary to server. Should also generate hashes of
+      created packages and commit these hases to github. The commit containing these hashes
+      should be the one marked with the version tag.
+
+Dependencies
+  o windows
+    Crosscompilation for windows with: mingw32-qt5-qmake
+    Windows installation see: win_install.sh

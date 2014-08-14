@@ -38,12 +38,14 @@ static void convert(const pw_store::data_type &from, dataset &to)
     }
     {
         to.url_used = std::min(255lu, from.url_string.length());
-        std::strncpy(const_cast<char *>(from.url_string.c_str()), to.url, to.url_used);
+        std::strncpy(const_cast<char *>(from.url_string.c_str()), to.url,
+                     to.url_used);
         to.url[to.url_used] = '\0';
     }
     {
         to.passwd_used = std::min(255lu, from.password.length());
-        std::strncpy(const_cast<char *>(from.password.c_str()), to.passwd, to.passwd_used);
+        std::strncpy(const_cast<char *>(from.password.c_str()), to.passwd,
+                     to.passwd_used);
         to.passwd[to.passwd_used] = '\0';
     }
 }
@@ -71,7 +73,7 @@ pwstore_handle pwstore_create(const char *password, size_t password_length,
     pwstore_c *obj = new pwstore_c;
     obj->db = new pw_store_api_cxx::pwstore_api(std::string(db_file),
                                                 std::string(password));
-    if (!*obj->db)
+    if(!*obj->db)
         return nullptr;
 
     return reinterpret_cast<pwstore_handle>(obj);
@@ -99,7 +101,8 @@ bool pwstore_lookup(pwstore_handle handle, struct dataset **matches,
 {
     (void)lookup_key_length;
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
-    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> matches_cxx;
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+    matches_cxx;
 
     std::vector<pw_store::data_type::id_type> uids_cxx;
     if(uids && uids_length)
@@ -111,7 +114,7 @@ bool pwstore_lookup(pwstore_handle handle, struct dataset **matches,
 
     size_t cnt = 0;
     matches_cxx.resize(std::min(matches_cxx.size(), matches_length));
-    for(const auto &match: matches_cxx)
+    for(const auto &match : matches_cxx)
         convert(std::get<1>(match), *matches[cnt++]);
     *matches_real_length = matches_cxx.size();
 
@@ -145,7 +148,7 @@ bool pwstore_remove_one(pwstore_handle handle, size_t uid)
 {
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
 
-    std::vector<pw_store::data_type::id_type> uids_cxx{ uid };
+    std::vector<pw_store::data_type::id_type> uids_cxx{uid};
     if(!obj->db->remove(uids_cxx))
         return false;
 
@@ -184,11 +187,13 @@ bool pwstore_gen_entry(pwstore_handle handle, const char *username,
     return true;
 }
 
+/*
 bool pwstore_dump(pwstore_handle handle)
 {
     pwstore_c *obj = reinterpret_cast<pwstore_c *>(handle);
     return obj->db->dump();
 }
+*/
 
 bool pwstore_sync(pwstore_handle handle)
 {

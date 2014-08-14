@@ -25,7 +25,7 @@ bool pw_store_api_cxx::encrypted_pwstore::sync_and_write_db()
     using namespace libaan::crypto::file;
     db->synchronize_buffer();
     const auto err = crypto_file->write(password);
-    if (err != crypto_file::NO_ERROR) {
+    if(err != crypto_file::NO_ERROR) {
         std::cerr << "Writing database to disk failed. Error: "
                   << crypto_file::error_string(err) << "\n";
         return false;
@@ -34,16 +34,17 @@ bool pw_store_api_cxx::encrypted_pwstore::sync_and_write_db()
     return true;
 }
 
-std::unique_ptr<pw_store::database> pw_store_api_cxx::encrypted_pwstore::load_db()
+std::unique_ptr<pw_store::database>
+pw_store_api_cxx::encrypted_pwstore::load_db()
 {
-    if (!crypto_file)
+    if(!crypto_file)
         return nullptr;
 
     using namespace libaan::crypto::file;
 
     // Read encrypted database with provided password.
     auto err = crypto_file->read(password);
-    if (err != crypto_file::NO_ERROR) {
+    if(err != crypto_file::NO_ERROR) {
         std::cerr << "Error deciphering database. Wrong key? ("
                   << crypto_file::error_string(err) << ")\n";
         return nullptr;
@@ -54,7 +55,7 @@ std::unique_ptr<pw_store::database> pw_store_api_cxx::encrypted_pwstore::load_db
     // Better to be replaced with a class.
     std::unique_ptr<pw_store::database> db(
         new pw_store::database(crypto_file->get_decrypted_buffer()));
-    if (!db->parse()) {
+    if(!db->parse()) {
         std::cerr << "Error: corrupt database file.\n";
         return nullptr;
     }
@@ -83,7 +84,7 @@ bool pw_store_api_cxx::encrypted_pwstore::unlock(const std::string &passwd)
 
 bool pw_store_api_cxx::pwstore_api::add(const pw_store::data_type &date)
 {
-    if (!state)
+    if(!state)
         return false;
 
     if(!db.get().insert(date)) {
@@ -100,13 +101,13 @@ bool pw_store_api_cxx::pwstore_api::lookup(
     const std::string &lookup_key,
     const std::vector<pw_store::data_type::id_type> &uids)
 {
-    if (!state)
+    if(!state)
         return false;
 
     if(lookup_key.length())
         db.get().lookup(lookup_key, matches);
 
-    for(const auto &id: uids) {
+    for(const auto &id : uids) {
         pw_store::data_type data;
         if(db.get().get(id, data))
             matches.push_back(std::make_tuple(id, data));
@@ -118,15 +119,16 @@ bool pw_store_api_cxx::pwstore_api::lookup(
 bool pw_store_api_cxx::pwstore_api::get(const pw_store::data_type::id_type &uid,
                                         pw_store::data_type &date)
 {
-    if (!state)
+    if(!state)
         return false;
 
     return db.get().get(uid, date);
 }
 
-bool pw_store_api_cxx::pwstore_api::remove(std::vector<pw_store::data_type::id_type> &uids)
+bool pw_store_api_cxx::pwstore_api::remove(
+    std::vector<pw_store::data_type::id_type> &uids)
 {
-    if (!state)
+    if(!state)
         return false;
 
     if(uids.size() == 1) {
@@ -144,17 +146,44 @@ bool pw_store_api_cxx::pwstore_api::remove(std::vector<pw_store::data_type::id_t
 bool
 pw_store_api_cxx::pwstore_api::change_password(const std::string &new_password)
 {
-    if (!state)
+    if(!state)
         return false;
     db.change_password(new_password);
     return true;
 }
 
-bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username, const std::string &url_string,
-                                               std::string &password)
+namespace
 {
-    if (!state)
+bool generate_pw(std::string &password, const std::string &ascii_set)
+{
+    std::string new_ascii_set;
+    const std::string &set = (ascii_set.empty() ? new_ascii_set : ascii_set);
+    if(ascii_set.empty()) {
+        for(int i = 0; i < 255; i++)
+            if(isprint(i))
+                new_ascii_set.push_back(char(i));
+    }
+
+    if(!libaan::crypto::read_random_ascii_set(12, set, password)) {
+        std::cerr << "Error creating a password from random data. Aborting.\n";
         return false;
+    }
+    return true;
+}
+}
+
+bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username,
+                                               const std::string &url_string,
+                                               std::string &password,
+                                               bool insert_generated,
+                                               const std::string &ascii_set)
+{
+    if(!state)
+        return false;
+
+    // only generate a password
+    if(!insert_generated)
+        return generate_pw(password, ascii_set);
 
     if(!url_string.length() && !username.length()) {
         std::cerr << "Error: creating a password for an empty"
@@ -166,15 +195,8 @@ bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username, cons
     pw_store::data_type date;
     date.username = username;
     date.url_string = url_string;
-
-    std::string ascii_set;
-    for(int i = 0; i < 255; i++)
-        if(isprint(i))
-            ascii_set.push_back(char(i));
-    if(!libaan::crypto::read_random_ascii_set(12, ascii_set, date.password)) {
-        std::cerr << "Error creating a password from random data. Aborting.\n";
+    if(!generate_pw(date.password, ascii_set))
         return false;
-    }
 
     if(!db.get().insert(date)) {
         std::cerr << "Error: inserting in database failed.\n";
@@ -187,28 +209,27 @@ bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username, cons
     return true;
 }
 
-bool pw_store_api_cxx::pwstore_api::dump() const
+bool pw_store_api_cxx::pwstore_api::dump(
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>> &
+        content) const
 {
-    if (!state)
+    if(!state)
         return false;
 
-    db.get().dump_db();
+    db.get().dump_db(content);
 
     return true;
 }
 
 bool pw_store_api_cxx::pwstore_api::sync()
 {
-    if (!state)
+    if(!state)
         return false;
 
     return db.sync();
 }
 
-void pw_store_api_cxx::pwstore_api::lock()
-{
-    db.lock();
-}
+void pw_store_api_cxx::pwstore_api::lock() { db.lock(); }
 
 bool pw_store_api_cxx::pwstore_api::unlock(const std::string &password)
 {

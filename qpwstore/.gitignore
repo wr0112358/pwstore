@@ -1,0 +1,6 @@
+qpwstore
+moc_*
+*.o
+Makefile*
+debug/
+release/

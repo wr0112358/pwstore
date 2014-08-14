@@ -1,6 +1,6 @@
 ---
 Language:        Cpp
-AccessModifierOffset: -0
+AccessModifierOffset: -4
 ConstructorInitializerIndentWidth: 4
 AlignEscapedNewlinesLeft: false
 AlignTrailingComments: true
@@ -47,6 +47,6 @@ SpacesInContainerLiterals: true
 SpaceBeforeAssignmentOperators: true
 ContinuationIndentWidth: 4
 CommentPragmas:  '^ IWYU pragma:'
-SpaceBeforeParens: ControlStatements
+SpaceBeforeParens: Never
 ...
 

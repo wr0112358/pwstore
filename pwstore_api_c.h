@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdbool.h>
 #include <stddef.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,8 +30,8 @@ typedef void *pwstore_handle;
 
 struct dataset
 {
-	/* Making my life easier: gui won't display longer lines anyway..
-	   if a password should really be longer, return (0,0,0) for now. */
+    /* Making my life easier: gui won't display longer lines anyway..
+       if a password should really be longer, return (0,0,0) for now. */
     char username[256];
     size_t username_used;
     char url[256];
@@ -74,8 +73,9 @@ bool pwstore_change_password(pwstore_handle handle, const char *new_password,
 bool pwstore_gen_entry(pwstore_handle handle, const char *username,
                        const char *url_string, char *password,
                        size_t password_length, size_t *password_real_length);
+/*
 bool pwstore_dump(pwstore_handle handle);
-
+*/
 bool pwstore_sync(pwstore_handle handle);
 
 void pwstore_lock(pwstore_handle handle);
