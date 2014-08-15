@@ -16,32 +16,21 @@ objects_pwstore :=  $(sources_pwstore:.cc=.o)
 %.o: %.cc
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(DEFINES) -c $? -o $@
 
-all: pwstore
+all: pwstore qpwstore
 
 pwstore: $(objects_pwstore)
-#	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(LDFLAGS) $^ -o $(APP)
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $^ -o $(APP) $(LDFLAGS)
 
 clean: clean_qpwstore
 	rm -f *.o pwstore pwstore.exe *.a test_c
 
-install: pwstore
+install: pwstore qpwstore
 	cp pwstore $(INSTALL_BIN_DIR)
 	cp .pwstore-completion.sh $(INSTALL_SHARE_DIR)
 	@printf "\nTo enable bash completion for $(APP).\nAdd to .bashrc:\n\tsource $(INSTALL_SHARE_DIR)/.pwstore-completion.sh\n"
+	cp qpwstore/qpwstore $(INSTALL_BIN_DIR)
 
-
-win64: CXX=x86_64-w64-mingw32-g++
-win64: DEFINES=-DNO_GOOD $(MINGW_DEFINES)
-# LDFLAGS must appear in this order an at the end of the linker command.
-win64: LDFLAGS=-lssl -lcrypto -lgdi32 -lws2_32
-win64: APP=pwstore.exe
-win64: clean pwstore
-	./win_install.sh
-
-
-
-
+# c-bindings api related to rgtk gui
 sources_pwstore_api := pwstore.cc pwstore_api_cxx.cc pwstore_api_c.cc
 objects_pwstore_api :=  $(sources_pwstore:.cc=.o)
 test_c_lib: $(objects_pwstore_api)
@@ -51,7 +40,6 @@ test_c_lib: $(objects_pwstore_api)
 	gcc -c $? -o $@
 
 test_c_prog: test_c_api.o
-#	 g++ $^ -o test_c $(LDFLAGS) test_lib.a
 	gcc -lstdc++ test_c_api.c -o test_c $(LDFLAGS) test_lib.a
 
 test_c: test_c_lib test_c_prog
@@ -68,8 +56,17 @@ clean_qpwstore:
 		make -C qpwstore/ distclean; \
 	fi
 
-# LDFLAGS must appear in this order an at the end of the linker command.
-qpwstore_win: LDFLAGS=-lssl -lcrypto -lgdi32 -lws2_32
+
+# windows build of pwstore
+win64: CXX=x86_64-w64-mingw32-g++
+win64: DEFINES=-DNO_GOOD $(MINGW_DEFINES)
+# LDFLAGS must appear in this order at the end of the linker command.
+win64: LDFLAGS=-lssl -lcrypto -lgdi32 -lws2_32
+win64: APP=pwstore.exe
+win64: clean pwstore
+	./win_install.sh
+
+# windows build of qpwstore
 qpwstore_win: QMAKE=/usr/bin/mingw32-qmake-qt5
 qpwstore_win: qpwstore_init
 	make -j 16 -C qpwstore/

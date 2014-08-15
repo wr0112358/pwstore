@@ -9,6 +9,10 @@ qt gui. Fast lookup of keys/values with partial string matching.
 
 
 Usage
+  Gui:
+  qpwstore/qpwstore
+
+  Command line interface:
   Add some data:
   ./pwstore add
   Or add some provided test data:
@@ -41,6 +45,7 @@ Get it
   Recursive clone, to get the deps too.
   git clone --recursive <this-repo>
   make pwstore
+  make qpwstore
 
 
 Installation
