@@ -19,9 +19,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 #include <chrono>
+#include <cstdlib>
 #include <functional>
 #include <list>
 #include <signal.h>
+#include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
 
@@ -51,6 +53,11 @@ void sigint_handler(int signum)
             exit(EXIT_FAILURE);
         SIGINT_CAUGHT = true;
     }
+}
+
+bool ssh_running()
+{
+    return getenv("SSH_CLIENT") && getenv("SSH_CONNECTION");
 }
 
 struct config_type
@@ -291,7 +298,7 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
     //       good enough for now and does not seem to have much
     //       cpu impact.
     const std::chrono::milliseconds dura(150);
-    const long DEFAULT_TIMEOUT_SECS = 20;
+    const long DEFAULT_TIMEOUT_SECS = 120;
     auto time_of_last_change = std::chrono::high_resolution_clock::now();
 
     std::string input;
@@ -508,6 +515,18 @@ bool run(config_type config)
     pw_store_api_cxx::pwstore_api db(config.db_file, db_password);
     if(!db)
         return false;
+
+    if(!db.empty()) {
+        const auto mod_time = db.time_of_last_write();
+        std::cout << "Authenticity verified. Date of last modification: "
+                  << mod_time << ".\nVerify integrity by comparing dates.(Y/n)\n";
+        {
+            libaan::util::rawmode tty_raw;
+            const auto in = tty_raw.getch();
+            if(in != 'Y')
+                return false;
+        }
+    }
 
     bool ret = true;
     switch(config.mode) {
@@ -747,6 +766,22 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
             config.db_file = DEFAULT_CIPHER_DB;
         else
             config.db_file = std::string(env_db);
+    }
+    if(config.db_file.length()
+       && (config.mode == config_type::DUMP
+           || config.mode == config_type::INTERACTIVE_LOOKUP
+           || config.mode == config_type::LOOKUP
+           || config.mode == config_type::GET)){
+        struct stat s;
+        if(stat(config.db_file.c_str(), &s)) {
+            std::cerr << "Invalid database specified.\n";
+            return false;
+        }
+    }
+
+    if(output == TO_X11 && ssh_running()) {
+        std::cerr << "When running over ssh, pwstore only supports output to stdout.\n";
+        return false;
     }
 
     if(output == TO_X11) {

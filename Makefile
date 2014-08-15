@@ -6,8 +6,8 @@ APP=pwstore
 INSTALL_BIN_DIR=/opt/usr/bin
 INSTALL_SHARE_DIR=/opt/usr/share
 
-INCLUDES=-I.deps/
-#INCLUDES=-I..
+#INCLUDES=-I.deps/
+INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc pwstore_api_c.cc
@@ -44,7 +44,8 @@ test_c_prog: test_c_api.o
 
 test_c: test_c_lib test_c_prog
 
-QMAKE:=/opt/qt/5.2.1/gcc_64/bin/qmake
+#QMAKE:=/opt/qt/5.2.1/gcc_64/bin/qmake
+QMAKE:=qmake-qt5
 qpwstore_init:
 	(cd qpwstore/; $(QMAKE) -makefile)
 

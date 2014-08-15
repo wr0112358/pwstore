@@ -30,20 +30,21 @@ struct pwstore_c
 static void convert(const pw_store::data_type &from, dataset &to)
 {
     // TODO: passwd > 255
+    const decltype(from.username.length()) max_length{255};
     {
-        to.username_used = std::min(255lu, from.username.length());
+        to.username_used = std::min(max_length, from.username.length());
         std::strncpy(const_cast<char *>(from.username.c_str()), to.username,
                      to.username_used);
         to.username[to.username_used] = '\0';
     }
     {
-        to.url_used = std::min(255lu, from.url_string.length());
+        to.url_used = std::min(max_length, from.url_string.length());
         std::strncpy(const_cast<char *>(from.url_string.c_str()), to.url,
                      to.url_used);
         to.url[to.url_used] = '\0';
     }
     {
-        to.passwd_used = std::min(255lu, from.password.length());
+        to.passwd_used = std::min(max_length, from.password.length());
         std::strncpy(const_cast<char *>(from.password.c_str()), to.passwd,
                      to.passwd_used);
         to.passwd[to.passwd_used] = '\0';

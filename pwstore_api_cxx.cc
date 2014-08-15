@@ -203,7 +203,6 @@ bool pw_store_api_cxx::pwstore_api::gen_passwd(const std::string &username,
         return false;
     }
 
-    std::cout << "Created and stored key for: " << date << ".\n";
     password = date.password;
 
     return true;

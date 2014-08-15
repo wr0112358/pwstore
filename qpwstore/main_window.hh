@@ -1,6 +1,7 @@
 #ifndef _MAINWINDOW_HH_
 #define _MAINWINDOW_HH_
 
+#include <list>
 #include <memory>
 #include <QClipboard>
 #include <QGraphicsScene>
@@ -17,6 +18,9 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+#ifndef NO_GOOD
+class QSocketNotifier;
+#endif
 class QSpacerItem;
 class QStatusBar;
 class list_container;
@@ -29,10 +33,10 @@ class pwstore_api;
 /*
   Missing:
 
-  o qmake crosscompilation for windows
-
   o memorize user stuff like last used database, last used directory when
     using "open/create db"
+  o close db when C-w is pressed + add close button
+  o fix layput in closed-mode
 
 */
 
@@ -43,6 +47,9 @@ public:
     main_window(QWidget *parent, const std::string &default_db);
     ~main_window();
     void keyPressEvent(QKeyEvent *event);
+#ifndef NO_GOOD
+    static void handle_sigint(int unused);
+#endif
 
 protected:
     void timerEvent(QTimerEvent *event);
@@ -71,7 +78,18 @@ private:
     QPushButton *remove_entry;
     QPushButton *modify_entry;
     bool editing = false;
+
+    // nothing open mode elements
+    QPushButton *open_lru;
+    // store backlog
     std::list<std::string> log_msgs;
+
+#ifndef NO_GOOD
+    // handle unix SIGINT signal:
+    // https://qt-project.org/doc/qt-4.7/unix-signals.html
+    static int sigintfd[2];
+    QSocketNotifier *notify_sigint;
+#endif
 
 private:
     bool passworddialog(std::string &password);
@@ -88,6 +106,11 @@ private:
     void modify_entry_id(pw_store::data_type::id_type id);
     void log_err(const std::string &msg);
     void log_info(const std::string &msg);
+
+#ifndef NO_GOOD
+public slots:
+    void handle_sigint();
+#endif
 
 private slots:
     void create_pressed();

@@ -16,16 +16,50 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#ifndef NO_GOOD
+#include <QSocketNotifier>
+#endif
 #include <QStatusBar>
 #include <QTimer>
+#ifndef NO_GOOD
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 #include "key_handler.hh"
 #include "list_entry.hh"
 #include "../pwstore_api_cxx.hh"
 
+int main_window::sigintfd[2];
+
+#ifndef NO_GOOD
+namespace {
+bool setup_signals()
+{
+    struct sigaction sigint;
+
+    sigint.sa_handler = main_window::handle_sigint;
+    sigemptyset(&sigint.sa_mask);
+    sigint.sa_flags |= SA_RESTART;
+
+    if(sigaction(SIGINT, &sigint, 0) > 0)
+        return false;
+
+    return true;
+}
+}
+#endif
 main_window::main_window(QWidget *parent, const std::string &default_db)
     : QMainWindow(parent, Qt::FramelessWindowHint)
 {
+#ifndef NO_GOOD
+    if(::socketpair(AF_UNIX, SOCK_STREAM, 0, sigintfd))
+        qFatal("Couldn't create SIGINT socketpair");
+    notify_sigint = new QSocketNotifier(sigintfd[1], QSocketNotifier::Read, this);
+    connect(notify_sigint, SIGNAL(activated(int)), this, SLOT(handle_sigint()));
+    setup_signals();
+#endif
+
     layout = new QGridLayout;
 
     list = new QListWidget(this);
@@ -96,6 +130,20 @@ main_window::main_window(QWidget *parent, const std::string &default_db)
     remove_entry->hide();
     modify_entry->hide();
 
+    // this will be shown if no db is open:
+    static const std::string lru_db = QDir::home().absolutePath().toStdString() + "/.my_secrets";
+    open_lru =
+        new QPushButton(QString::fromStdString("open default database: \"" + lru_db + "\""));
+
+    connect(open_lru, &QPushButton::clicked, [&]() {
+            open_db(lru_db);
+            std::cout << "open_lru_link_activated(\""<< lru_db << "\")\n";
+    });
+
+    line_edit->hide();
+    list->hide();
+    layout->addWidget(open_lru, 2, 0, 1, 1);
+
     // QMainWindow needs a central widget to be able to use a layout.
     QWidget *central_widget = new QWidget;
     layout->setSpacing(1);
@@ -111,6 +159,26 @@ main_window::main_window(QWidget *parent, const std::string &default_db)
 }
 
 main_window::~main_window() {}
+
+#ifndef NO_GOOD
+void main_window::handle_sigint(int)
+{
+    char a = 1;
+    (void)::write(sigintfd[0], &a, sizeof(a));
+}
+
+void main_window::handle_sigint()
+{
+    notify_sigint->setEnabled(false);
+    char tmp;
+    (void)::read(sigintfd[1], &tmp, sizeof(tmp));
+
+    exit_pressed();
+
+    // reset the handler
+    notify_sigint->setEnabled(true);
+}
+#endif
 
 void main_window::keyPressEvent(QKeyEvent *event)
 {
@@ -165,6 +233,17 @@ void main_window::open_db(const std::string &db_file)
         sync_button->show();
         show_all->show();
         create_button->hide();
+
+        line_edit->show();
+        list->show();
+        open_lru->hide();
+
+        if(!db->empty()) {
+            const auto mod_time = db->time_of_last_write();
+            log_info("Authenticity verified. Date of last modification: " +
+                     mod_time);
+            // TODO: Verify integrity by comparing dates.
+        }
     }
     update_list_from_db();
 }
@@ -172,7 +251,7 @@ void main_window::open_db(const std::string &db_file)
 void main_window::restart_db_lock_timer()
 {
     stop_db_lock_timer();
-    lock_db_timer = startTimer(1000 * 30);
+    lock_db_timer = startTimer(1000 * 120);
 }
 
 void main_window::stop_db_lock_timer()
@@ -186,26 +265,22 @@ void main_window::stop_db_lock_timer()
 void main_window::create_pressed()
 {
     QString filename = QFileDialog::getSaveFileName(
-        this, tr("Create Database"), QDir::home().absolutePath(),
-        tr("Database Files (.my_secrets*)"));
+        this, tr("Create Database"), QDir::home().absolutePath());
 
     if(filename.isEmpty())
         return;
 
-    // TODO: handle already open//dirty case
     open_db(filename.toStdString());
 }
 
 void main_window::open_pressed()
 {
     QString filename = QFileDialog::getOpenFileName(
-        this, tr("Open Database"), QDir::home().absolutePath(),
-        tr("Database Files (.my_secrets*)"));
+        this, tr("Open Database"), QDir::home().absolutePath());
 
     if(filename.isEmpty())
         return;
 
-    // TODO: handle already open//dirty case
     open_db(filename.toStdString());
 }
 
@@ -240,14 +315,12 @@ void main_window::update_list_from_db()
 
     // DEBUG
     if(!db || !*db) {
-        // This should not happen!
         log_err("invalid state of db.(MW_ULFD)");
         return;
     }
 
     if(db->locked())
         return;
-
     const std::string filter_string = line_edit->text().toStdString();
     if(filter_string.empty()) {
         // No filter input from user. Show all by default?
@@ -292,7 +365,6 @@ void main_window::lock_pressed()
 {
     // DEBUG
     if(!db || !*db) {
-        // This should not happen!
         log_err("invalid state of db.");
         lock_button->setText("lock/unlock");
         lock_button->setEnabled(false);
@@ -364,7 +436,6 @@ void main_window::add_entry_pressed()
 
     // DEBUG
     if(!db || !*db) {
-        // This should not happen!
         log_err("invalid state of db.(MW_AEP)");
         return;
     }
@@ -464,7 +535,6 @@ bool main_window::passworddialog(std::string &password)
     bool ok;
     QString text = QInputDialog::getText(
         this, tr("QInputDialog::getText()"), tr("Password:"),
-        // QLineEdit::PasswordEchoOnEdit,
         QLineEdit::NoEcho, QDir::home().dirName(), &ok);
     if(ok && !text.isEmpty())
         password.assign(text.toStdString());
@@ -550,7 +620,6 @@ bool main_window::open_three_inputs_window(pw_store::data_type &date,
     form.addRow(label_user, edit_user);
     form.addRow(label_pw, edit_pw);
 
-    // TODO: duplicate code
     std::string ascii_set;
     for(int i = 0; i < 255; i++)
         if(isprint(i))
@@ -571,7 +640,7 @@ bool main_window::open_three_inputs_window(pw_store::data_type &date,
             edit_pw->setText(QString::fromStdString(password));
     });
 
-    // Add some standard buttons (Cancel/Ok) at the bottom of the dialog
+    // Add standard buttons (Cancel/Ok) at the bottom of the dialog
     QDialogButtonBox button_box(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                                 Qt::Horizontal, &dialog);
     form.addRow(&button_box);
@@ -591,9 +660,9 @@ bool main_window::open_three_inputs_window(pw_store::data_type &date,
 void main_window::log_info(const std::string &msg)
 {
     log_msgs.push_front(msg);
-    log_msgs.resize(20);
+    log_msgs.resize(1);
 
-    statusBar()->showMessage(tr(msg.c_str()), 2000);
+    statusBar()->showMessage(tr(msg.c_str()), 120000);
 }
 
 void main_window::log_err(const std::string &msg)
@@ -602,5 +671,5 @@ void main_window::log_err(const std::string &msg)
     log_msgs.push_front(msg_tmp);
     log_msgs.resize(20);
 
-    statusBar()->showMessage(tr(msg_tmp.c_str()), 2000);
+    statusBar()->showMessage(tr(msg_tmp.c_str()), 120000);
 }
