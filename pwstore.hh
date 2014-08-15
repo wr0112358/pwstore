@@ -26,10 +26,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <string>
 #include <tuple>
 
-namespace pw_store {
+namespace pw_store
+{
 
 // stores key value tuples in a string
-// - where keys are url-strings and usernames. values are usernames and passwords.
+// - where keys are url-strings and usernames. values are usernames and
+// passwords.
 // - per entry 3 delim characters must exist
 // format is:
 //   entry = URL DELIM USERNAME DELIM PASSWORD DELIM
@@ -40,11 +42,12 @@ namespace pw_store {
 struct data_type
 {
     using id_type = std::size_t;
-    data_type()
-        : data_type("", "", "") {}
-    data_type(const std::string & url, const std::string & user,
-              const std::string & pass)
-        : url_string(url), username(user), password(pass) {}
+    data_type() : data_type("", "", "") {}
+    data_type(const std::string &url, const std::string &user,
+              const std::string &pass)
+        : url_string(url), username(user), password(pass)
+    {
+    }
 
     friend std::ostream &operator<<(std::ostream &os, const data_type &date);
     std::string to_string() const;
@@ -72,8 +75,9 @@ public:
 
 public:
     // Create database object from string buffer. No copying involved.
-    explicit database(std::string &buffer)
-        : dirty(false), string_buffer(buffer) {}
+    explicit database(std::string &buffer) : dirty(false), string_buffer(buffer)
+    {
+    }
 
     ~database() { clear_all_buffers(); }
     // Parse the provided buffer.
@@ -83,7 +87,7 @@ public:
     // together with an unique id. This id is invalidated after add or delete
     // operations.
     void lookup(const std::string &key,
-                std::list<std::tuple<data_type::id_type, data_type> > &matches);
+                std::list<std::tuple<data_type::id_type, data_type>> &matches);
     void synchronize_buffer();
     void clear_all_buffers();
 
@@ -118,41 +122,42 @@ public:
 
     bool remove(const data_type::id_type &id)
     {
-        if (id >= urluserpw.size())
+        if(id >= urluserpw.size())
             return false;
         urluserpw.erase(std::begin(urluserpw) + id);
         return true;
     }
 
-    void dump_db() const;
-private:
+    void dump_db(
+        std::list<std::tuple<data_type::id_type, data_type>> &content) const;
 
+    bool is_dirty() const { return dirty; }
+
+private:
     using tuple_type = std::tuple<std::string, std::string, std::string>;
-    struct list_cmp {
-        // returns true if a < b 
+    struct list_cmp
+    {
+        // returns true if a < b
         bool operator()(const tuple_type &a, const tuple_type &b)
         {
             // true if a.url < b.url
-            if(std::lexicographical_compare(std::begin(std::get<0>(a)),
-                                            std::end(std::get<0>(a)),
-                                            std::begin(std::get<0>(b)),
-                                            std::end(std::get<0>(b))))
+            if(std::lexicographical_compare(
+                   std::begin(std::get<0>(a)), std::end(std::get<0>(a)),
+                   std::begin(std::get<0>(b)), std::end(std::get<0>(b))))
                 return true;
 
             // post condition: a.url >= b.url
             // true if a.url > b.url
-            if(std::lexicographical_compare(std::begin(std::get<0>(b)),
-                                            std::end(std::get<0>(b)),
-                                            std::begin(std::get<0>(a)),
-                                            std::end(std::get<0>(a))))
+            if(std::lexicographical_compare(
+                   std::begin(std::get<0>(b)), std::end(std::get<0>(b)),
+                   std::begin(std::get<0>(a)), std::end(std::get<0>(a))))
                 return false;
 
             // post condition: a.url = b.url
             // true if a.user < b.user
-            if(std::lexicographical_compare(std::begin(std::get<1>(a)),
-                                            std::end(std::get<1>(a)),
-                                            std::begin(std::get<1>(b)),
-                                            std::end(std::get<1>(b))))
+            if(std::lexicographical_compare(
+                   std::begin(std::get<1>(a)), std::end(std::get<1>(a)),
+                   std::begin(std::get<1>(b)), std::end(std::get<1>(b))))
                 return true;
 
             return false;
@@ -160,12 +165,12 @@ private:
     };
 
     // TODO: why not just save it as data_type?
-    data_type to_data_type(const tuple_type & t) const
+    data_type to_data_type(const tuple_type &t) const
     {
         return data_type(std::get<0>(t), std::get<1>(t), std::get<2>(t));
     }
 
-    tuple_type to_tuple_type(const data_type & date) const
+    tuple_type to_tuple_type(const data_type &date) const
     {
         return std::make_tuple(date.url_string, date.username, date.password);
     }
@@ -179,7 +184,6 @@ private:
     // interactive lookup
     std::vector<tuple_type> urluserpw;
 };
-
 }
 
 #endif

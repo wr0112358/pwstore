@@ -24,13 +24,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 bool pw_store::database::parse()
 {
+    urluserpw.clear();
     line_count = 0;
-    if (!string_buffer.size())
+    if(!string_buffer.size())
         return true;
 
     const auto lines = libaan::util::split2(string_buffer, "\n");
 
-    for(const auto &line_buff: lines) {
+    for(const auto &line_buff : lines) {
         if(!line_buff.second)
             continue;
         const auto line = std::string(line_buff.first, line_buff.second);
@@ -49,6 +50,9 @@ bool pw_store::database::parse()
         insert(date);
         ++line_count;
     }
+
+    dirty = false;
+
     return true;
 }
 
@@ -63,31 +67,21 @@ bool pw_store::database::insert(const data_type &date)
     return true;
 }
 
-void pw_store::database::lookup(const std::string &key,
-                                std::list<std::tuple<data_type::id_type, data_type> > &matches)
+void pw_store::database::lookup(
+    const std::string &key,
+    std::list<std::tuple<data_type::id_type, data_type>> &matches)
 {
     // Just do a linear search for now. The number of keys won't be that large.
     const auto &fail = std::string::npos;
     data_type::id_type idx = 0;
-    for (const auto &k : urluserpw) {
+    for(const auto &k : urluserpw) {
         const std::string &url = std::get<0>(k);
         const std::string &user = std::get<1>(k);
         const bool url_match = url.find(key) != fail;
         const bool user_match = user.find(key) != fail;
 
-        if (url_match || user_match)
+        if(url_match || user_match)
             matches.push_back(std::make_tuple(idx, to_data_type(k)));
-
-/*
-        std::string debug_out = "key(\"" + key + "\") -> ";
-        if (url_match)
-            debug_out += "url_matched(\"" + std::get<0>(k) + "\") ";
-        if (user_match)
-            debug_out += "user_matched(\"" + std::get<1>(k) + "\")";
-        if (url_match || user_match)
-            std::cout << debug_out << "\n";
-*/
-
         idx++;
     }
 }
@@ -97,9 +91,9 @@ void pw_store::database::synchronize_buffer()
     if(!dirty)
         return;
 
-    //std::fill(string_buffer.begin(), string_buffer.end(), 0);
+    // std::fill(string_buffer.begin(), string_buffer.end(), 0);
     string_buffer.resize(0);
-    for(const auto &tuple: urluserpw) {
+    for(const auto &tuple : urluserpw) {
         string_buffer.append(std::get<0>(tuple));
         string_buffer.append(DELIM);
         string_buffer.append(std::get<1>(tuple));
@@ -114,7 +108,7 @@ void pw_store::database::synchronize_buffer()
 
 void pw_store::database::clear_all_buffers()
 {
-    for(auto &tuple: urluserpw) {
+    for(auto &tuple : urluserpw) {
         std::fill(std::get<0>(tuple).begin(), std::get<0>(tuple).end(), 0);
         std::fill(std::get<1>(tuple).begin(), std::get<1>(tuple).end(), 0);
         std::fill(std::get<2>(tuple).begin(), std::get<2>(tuple).end(), 0);
@@ -122,9 +116,12 @@ void pw_store::database::clear_all_buffers()
     urluserpw.resize(0);
 }
 
-void pw_store::database::dump_db() const
+void pw_store::database::dump_db(
+    std::list<std::tuple<data_type::id_type, data_type>> &content) const
 {
     data_type::id_type idx = 0;
-    for(const auto &key: urluserpw)
-        std::cout << "\t" << idx++ << ": " << to_data_type(key) << "\n";
+    for(const auto &key : urluserpw) {
+        content.push_back(std::make_tuple(idx, to_data_type(key)));
+        idx++;
+    }
 }
