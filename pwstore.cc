@@ -18,6 +18,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "pwstore.hh"
 
+#include <iostream>
 #include <tuple>
 
 #include "libaan/string_util.hh"
@@ -46,7 +47,6 @@ bool pw_store::database::parse()
         data_type date(std::string(fields[0].first, fields[0].second),
                        std::string(fields[1].first, fields[1].second),
                        std::string(fields[2].first, fields[2].second));
-
         insert(date);
         ++line_count;
     }
