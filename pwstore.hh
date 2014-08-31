@@ -169,6 +169,7 @@ public:
                 break;
             i--;
         }
+        dirty = true;
         return true;
     }
 
@@ -177,6 +178,7 @@ public:
         if(id >= urluserpw.size())
             return false;
         urluserpw.erase(std::begin(urluserpw) + id);
+        dirty = true;
         return true;
     }
 
