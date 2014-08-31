@@ -892,6 +892,11 @@ bool backup_db(const std::string &)
 #else
 bool backup_db(const std::string &db_file)
 {
+    { // if file does not exist, don't do anything
+        struct stat s;
+        if(stat(db_file.c_str(), &s))
+            return true;
+    }
     std::string buff;
     if(!libaan::util::file::read_file(db_file.c_str(), buff))
         return false;
