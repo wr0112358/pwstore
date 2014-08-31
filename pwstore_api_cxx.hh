@@ -20,9 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define _PWSTORE_API_CXX_
 
 #include "libaan/crypto_file.hh"
-
 #include "pwstore.hh"
-
 #include <memory>
 
 namespace pw_store_api_cxx
@@ -67,6 +65,14 @@ public:
             return false;
         return db->is_dirty();
     }
+    std::string
+    time_of_last_write() const
+    {
+        if(!crypto_file)
+            return "";
+        return crypto_file->time_of_last_write();
+    }
+    bool empty() const { return crypto_file->get_decrypted_buffer().length() == 0; }
 
 private:
     bool sync_and_write_db();
@@ -120,8 +126,9 @@ public:
 
     bool dirty() const { return db.is_dirty(); }
     bool locked() const { return db.is_locked(); }
-
+    std::string time_of_last_write() const { return db.time_of_last_write(); }
     operator bool() const { return state; }
+    bool empty() const { return db.empty(); }
 
 private:
     bool state;

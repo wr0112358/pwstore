@@ -20,7 +20,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define _PWSTORE_HH_
 
 #include <algorithm>
-#include <iostream>
 #include <list>
 #include <sstream>
 #include <string>
@@ -50,17 +49,70 @@ struct data_type
     }
 
     friend std::ostream &operator<<(std::ostream &os, const data_type &date);
-    std::string to_string() const;
+    std::string to_string(bool print_password) const;
 
     std::string url_string;
     std::string username;
     std::string password;
 };
 
-inline std::string data_type::to_string() const
+struct data_type_cmp_enhanced {
+    // returns true if a < b
+    bool operator()(const data_type &a, const data_type &b) const
+    {
+        // true if a.url < b.url
+        if(std::lexicographical_compare(
+               std::begin(a.url_string), std::end(a.url_string),
+               std::begin(b.url_string), std::end(b.url_string)))
+            return true;
+        if(a.url_string == b.url_string
+           && std::lexicographical_compare(
+               std::begin(a.username), std::end(a.username),
+               std::begin(b.username), std::end(b.username)))
+            return true;
+
+        if(a.username == b.username
+           && std::lexicographical_compare(
+               std::begin(a.password), std::end(a.password),
+               std::begin(b.password), std::end(b.password)))
+            return true;
+        return false;
+    }
+};
+
+struct data_type_cmp {
+    // returns true if a < b
+    bool operator()(const data_type &a, const data_type &b) const
+    {
+        // true if a.url < b.url
+        if(std::lexicographical_compare(
+               std::begin(a.url_string), std::end(a.url_string),
+               std::begin(b.url_string), std::end(b.url_string)))
+            return true;
+
+        // post condition: a.url >= b.url
+        // true if a.url > b.url
+        if(std::lexicographical_compare(
+               std::begin(b.url_string), std::end(b.url_string),
+               std::begin(a.url_string), std::end(a.url_string)))
+            return false;
+
+        // post condition: a.url = b.url
+        // true if a.user < b.user
+        if(std::lexicographical_compare(
+               std::begin(a.username), std::end(a.username),
+               std::begin(b.username), std::end(b.username)))
+            return true;
+
+        return false;
+    }
+};
+
+inline std::string data_type::to_string(bool print_password = false) const
 {
-    return std::string("(\"") + url_string + std::string("\", \"") + username +
-           std::string("\", \"") + "***" + std::string("\")");
+    const std::string pw = print_password ? password : std::string("...");
+        return std::string("(\"") + url_string + std::string("\", \"") + username +
+            std::string("\", \"") + pw + std::string("\")");
 }
 
 inline std::ostream &operator<<(std::ostream &os, const data_type &date)
@@ -95,7 +147,7 @@ public:
     {
         if(id >= urluserpw.size())
             return false;
-        date = to_data_type(urluserpw[id]);
+        date = urluserpw[id];
         return true;
     }
 
@@ -117,6 +169,7 @@ public:
                 break;
             i--;
         }
+        dirty = true;
         return true;
     }
 
@@ -125,6 +178,7 @@ public:
         if(id >= urluserpw.size())
             return false;
         urluserpw.erase(std::begin(urluserpw) + id);
+        dirty = true;
         return true;
     }
 
@@ -134,55 +188,13 @@ public:
     bool is_dirty() const { return dirty; }
 
 private:
-    using tuple_type = std::tuple<std::string, std::string, std::string>;
-    struct list_cmp
-    {
-        // returns true if a < b
-        bool operator()(const tuple_type &a, const tuple_type &b)
-        {
-            // true if a.url < b.url
-            if(std::lexicographical_compare(
-                   std::begin(std::get<0>(a)), std::end(std::get<0>(a)),
-                   std::begin(std::get<0>(b)), std::end(std::get<0>(b))))
-                return true;
-
-            // post condition: a.url >= b.url
-            // true if a.url > b.url
-            if(std::lexicographical_compare(
-                   std::begin(std::get<0>(b)), std::end(std::get<0>(b)),
-                   std::begin(std::get<0>(a)), std::end(std::get<0>(a))))
-                return false;
-
-            // post condition: a.url = b.url
-            // true if a.user < b.user
-            if(std::lexicographical_compare(
-                   std::begin(std::get<1>(a)), std::end(std::get<1>(a)),
-                   std::begin(std::get<1>(b)), std::end(std::get<1>(b))))
-                return true;
-
-            return false;
-        }
-    };
-
-    // TODO: why not just save it as data_type?
-    data_type to_data_type(const tuple_type &t) const
-    {
-        return data_type(std::get<0>(t), std::get<1>(t), std::get<2>(t));
-    }
-
-    tuple_type to_tuple_type(const data_type &date) const
-    {
-        return std::make_tuple(date.url_string, date.username, date.password);
-    }
-
-private:
     bool dirty;
     std::string &string_buffer;
     size_t line_count;
 
     // use dc3 suffix-array from libaan for readonly databases in case of
     // interactive lookup
-    std::vector<tuple_type> urluserpw;
+    std::vector<data_type> urluserpw;
 };
 }
 

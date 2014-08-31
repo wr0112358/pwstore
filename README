@@ -9,6 +9,10 @@ qt gui. Fast lookup of keys/values with partial string matching.
 
 
 Usage
+  Gui:
+  qpwstore/qpwstore
+
+  Command line interface:
   Add some data:
   ./pwstore add
   Or add some provided test data:
@@ -41,6 +45,7 @@ Get it
   Recursive clone, to get the deps too.
   git clone --recursive <this-repo>
   make pwstore
+  make qpwstore
 
 
 Installation
@@ -57,55 +62,20 @@ Installation
 	      ) end),
 
     And restart with: META-C-r
-  For openbox-lxde add to ~/.config/openbox/lxde-rc.xml:
-    <keybind key="C-1">
-      <action name="Execute">
-          <command>/opt/usr/bin/open_shell_in_cwd_of</command>
-      </action>
-    </keybind>
-    And restart with: $ openbox-lxde --reconfigure
-
 
 Missing/Bugs
-  o gui:
-    show last opened db as clickable string if no db is open
-    close button
-    file open dialog->no or sensible filter
+  o qpwstore: close button + C-W for close
 
-  o authenticity & integrity:
-    integrate mac. and show info on startup: last modification, and info why this is shown.
-
-  o general:
-    Rethink data structure and uid.
-    Show changes made since a specific backup file. (history functionality)
-    grep -n \(void\) . *
-    grep -ni todo . *
-
-  o x11 clipboard algorithm/qt clipboard
-    This won't work in a ssh session.
-
-  o cli:
+  o pwstore cli:
     Disabling ECHO in termios settings has no effect.
     Alternate mode does not clear the screen correctly using ssh in cygwin
     terminal.
-    Interactive add is missing.
-    - New mode for lookup, that is enabled by cmdline flag or by a command_option
-      in interactive mode: copy first username and if successfull copy password.
-      (Provide option to copy first username, then after selection request the
-      password.)
-    - Backup files are nice, but too many of them keep are created. Commandline
-      flag to delete some/all.
 
-  o windows:
-    - Interactive lookup not working yet. port terminal_util.hh
-    - Build/install instructions
-    - Integrate get.bat get.PS1 as install and update scripts, that
-      fetch the most recent stable version from binary server
-    - Script to upload latest stable binary to server. Should also generate hashes of
-      created packages and commit these hases to github. The commit containing these hashes
-      should be the one marked with the version tag.
+  o New mode for lookup, that is enabled by cmdline flag or by a command_option
+    in interactive mode: copy first username and if successfull copy password.
+    (Provide option to copy first username, then after selection request the
+    password.)
 
-Dependencies
-  o windows
-    Crosscompilation for windows with: mingw32-qt5-qmake
-    Windows installation see: win_install.sh
+  o windows pwstore cli:
+    Interactive lookup not working yet. port terminal_util.hh.
+    Build/install instructions.

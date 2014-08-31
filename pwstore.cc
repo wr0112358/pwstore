@@ -18,6 +18,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "pwstore.hh"
 
+#include <iostream>
 #include <tuple>
 
 #include "libaan/string_util.hh"
@@ -46,7 +47,6 @@ bool pw_store::database::parse()
         data_type date(std::string(fields[0].first, fields[0].second),
                        std::string(fields[1].first, fields[1].second),
                        std::string(fields[2].first, fields[2].second));
-
         insert(date);
         ++line_count;
     }
@@ -58,9 +58,8 @@ bool pw_store::database::parse()
 
 bool pw_store::database::insert(const data_type &date)
 {
-    urluserpw.push_back(
-        std::make_tuple(date.url_string, date.username, date.password));
-    list_cmp cmp;
+    urluserpw.push_back(date);
+    data_type_cmp_enhanced cmp;
     std::sort(urluserpw.begin(), urluserpw.end(), cmp);
     dirty = true;
 
@@ -75,13 +74,11 @@ void pw_store::database::lookup(
     const auto &fail = std::string::npos;
     data_type::id_type idx = 0;
     for(const auto &k : urluserpw) {
-        const std::string &url = std::get<0>(k);
-        const std::string &user = std::get<1>(k);
-        const bool url_match = url.find(key) != fail;
-        const bool user_match = user.find(key) != fail;
+        const bool url_match = k.url_string.find(key) != fail;
+        const bool user_match = k.username.find(key) != fail;
 
         if(url_match || user_match)
-            matches.push_back(std::make_tuple(idx, to_data_type(k)));
+            matches.push_back(std::make_tuple(idx, k));
         idx++;
     }
 }
@@ -93,12 +90,12 @@ void pw_store::database::synchronize_buffer()
 
     // std::fill(string_buffer.begin(), string_buffer.end(), 0);
     string_buffer.resize(0);
-    for(const auto &tuple : urluserpw) {
-        string_buffer.append(std::get<0>(tuple));
+    for(const auto &k : urluserpw) {
+        string_buffer.append(k.url_string);
         string_buffer.append(DELIM);
-        string_buffer.append(std::get<1>(tuple));
+        string_buffer.append(k.username);
         string_buffer.append(DELIM);
-        string_buffer.append(std::get<2>(tuple));
+        string_buffer.append(k.password);
         string_buffer.append(DELIM);
         string_buffer.append("\n");
     }
@@ -108,10 +105,10 @@ void pw_store::database::synchronize_buffer()
 
 void pw_store::database::clear_all_buffers()
 {
-    for(auto &tuple : urluserpw) {
-        std::fill(std::get<0>(tuple).begin(), std::get<0>(tuple).end(), 0);
-        std::fill(std::get<1>(tuple).begin(), std::get<1>(tuple).end(), 0);
-        std::fill(std::get<2>(tuple).begin(), std::get<2>(tuple).end(), 0);
+    for(auto &k : urluserpw) {
+        std::fill(k.url_string.begin(), k.url_string.end(), 0);
+        std::fill(k.username.begin(), k.username.end(), 0);
+        std::fill(k.password.begin(), k.password.end(), 0);
     }
     urluserpw.resize(0);
 }
@@ -121,7 +118,7 @@ void pw_store::database::dump_db(
 {
     data_type::id_type idx = 0;
     for(const auto &key : urluserpw) {
-        content.push_back(std::make_tuple(idx, to_data_type(key)));
+        content.push_back(std::make_tuple(idx, key));
         idx++;
     }
 }

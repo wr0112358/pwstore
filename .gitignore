@@ -5,3 +5,5 @@ pwstore.exe
 .pwstore*
 test_c
 *.a
+*.tar
+scripts/
