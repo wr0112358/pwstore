@@ -25,7 +25,7 @@ QMAKE_INCDIR_QT += -I/usr/i686-w64-mingw32/sys-root/mingw/include/qt5/ -I/usr/i6
 #QMAKE_LFLAGS+=-L/usr/i686-w64-mingw32/sys-root/mingw/bin/
 }
 unix {
-QMAKE_CXX = clang++
+QMAKE_CXX = g++
 }
 
 QMAKE_CXXFLAGS += -Werror -Wall -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic # -pedantic-errors -m64

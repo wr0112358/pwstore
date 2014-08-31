@@ -64,37 +64,18 @@ Installation
     And restart with: META-C-r
 
 Missing/Bugs
-  o gui:
-    close button + C-W for close
+  o qpwstore: close button + C-W for close
 
-  o general:
-    Rethink data structure and uid.
-    Show changes made since a specific backup file. (history functionality)
-    grep -n \(void\) . *
-    grep -ni todo . *
-
-  o cli:
+  o pwstore cli:
     Disabling ECHO in termios settings has no effect.
     Alternate mode does not clear the screen correctly using ssh in cygwin
     terminal.
-    Interactive add is missing.
-    - New mode for lookup, that is enabled by cmdline flag or by a command_option
-      in interactive mode: copy first username and if successfull copy password.
-      (Provide option to copy first username, then after selection request the
-      password.)
-    - Backup files are nice, but too many of them keep are created. Commandline
-      flag to delete some/all.
 
-  o windows:
-    - Interactive lookup not working yet. port terminal_util.hh
-    - Build/install instructions
-    - Integrate get.bat get.PS1 as install and update scripts, that
-      fetch the most recent stable version from binary server
-    - Script to upload latest stable binary to server. Should also generate hashes of
-      created packages and commit these hases to github. The commit containing these hashes
-      should be the one marked with the version tag.
+  o New mode for lookup, that is enabled by cmdline flag or by a command_option
+    in interactive mode: copy first username and if successfull copy password.
+    (Provide option to copy first username, then after selection request the
+    password.)
 
-Dependencies
-  o windows
-    Crosscompilation for windows with: mingw32-qt5-qmake
-    Windows installation see: win_install.sh
+  o windows pwstore cli:
+    Interactive lookup not working yet. port terminal_util.hh.
+    Build/install instructions.

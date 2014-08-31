@@ -164,7 +164,8 @@ main_window::~main_window() {}
 void main_window::handle_sigint(int)
 {
     char a = 1;
-    (void)::write(sigintfd[0], &a, sizeof(a));
+    const auto ret = ::write(sigintfd[0], &a, sizeof(a));
+    (void)ret;
 }
 #endif
 
@@ -173,7 +174,8 @@ void main_window::handle_sigint()
 #ifndef NO_GOOD
     notify_sigint->setEnabled(false);
     char tmp;
-    (void)::read(sigintfd[1], &tmp, sizeof(tmp));
+    const auto ret = ::read(sigintfd[1], &tmp, sizeof(tmp));
+    (void)ret;
 
     exit_pressed();
 
@@ -609,7 +611,7 @@ bool main_window::open_three_inputs_window(pw_store::data_type &date,
     QString label_url = QString("URL: ");
     QLineEdit *edit_user = new QLineEdit(&dialog);
     QString label_user = QString("Username: ");
-    QLineEdit *edit_pw = new QLineEdit(&dialog);    // TODO: noecho
+    QLineEdit *edit_pw = new QLineEdit(&dialog);
     QString label_pw = QString("Password: ");
 
     if(modify_existing) {

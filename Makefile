@@ -1,4 +1,4 @@
-CXX=clang++
+CXX=g++
 CXX_FLAGS=-std=c++11 -g -Wall -Werror -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic # -Weffc++
 DEFINES=
 APP=pwstore
@@ -10,7 +10,7 @@ INSTALL_SHARE_DIR=/opt/usr/share
 INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
-sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc pwstore_api_c.cc
+sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc
 objects_pwstore :=  $(sources_pwstore:.cc=.o)
 
 %.o: %.cc
@@ -29,20 +29,6 @@ install: pwstore qpwstore
 	cp .pwstore-completion.sh $(INSTALL_SHARE_DIR)
 	@printf "\nTo enable bash completion for $(APP).\nAdd to .bashrc:\n\tsource $(INSTALL_SHARE_DIR)/.pwstore-completion.sh\n"
 	cp qpwstore/qpwstore $(INSTALL_BIN_DIR)
-
-# c-bindings api related to rgtk gui
-sources_pwstore_api := pwstore.cc pwstore_api_cxx.cc pwstore_api_c.cc
-objects_pwstore_api :=  $(sources_pwstore:.cc=.o)
-test_c_lib: $(objects_pwstore_api)
-	ar rcs test_lib.a $^
-
-%.o: %.c
-	gcc -c $? -o $@
-
-test_c_prog: test_c_api.o
-	gcc -lstdc++ test_c_api.c -o test_c $(LDFLAGS) test_lib.a
-
-test_c: test_c_lib test_c_prog
 
 #QMAKE:=/opt/qt/5.2.1/gcc_64/bin/qmake
 QMAKE:=qmake-qt5

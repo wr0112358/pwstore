@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <list>
 #include <signal.h>
@@ -73,9 +74,9 @@ struct config_type
         ADD,
         DUMP,
         INIT,
-        INTERACTIVE_ADD,
         INTERACTIVE_LOOKUP,
         LOOKUP,
+        MERGE,
         REMOVE,
         CHANGE_PASSWD,
         GEN_PASSWD,
@@ -86,6 +87,7 @@ struct config_type
     std::string lookup_key;
     std::vector<pw_store::data_type::id_type> uids;
     std::string db_file;
+    std::string merge_input_files[2];
     std::function<bool(const std::string &)> provide_value_to_user;
 };
 
@@ -118,30 +120,73 @@ bool read_until(const std::list<int> &end_char, std::string &accumulate)
 }
 
 // small cli-layer over pw_store_api_cxx
-bool add(pw_store_api_cxx::pwstore_api &db)
+
+bool add(pw_store_api_cxx::pwstore_api &db, config_type &config)
 {
-    pw_store::data_type date;
+    // read from stdin
+    if(config.merge_input_files[0].empty()) {
+        pw_store::data_type date;
 
-    std::cout << "Url:\n";
-    if(!read_until({'\n', '\r'}, date.url_string))
-        return false;
-    std::cout << "User:\n";
-    if(!read_until({'\n', '\r'}, date.username))
-        return false;
+        std::cout << "Url:\n";
+        if(!read_until({'\n', '\r'}, date.url_string))
+            return false;
+        std::cout << "User:\n";
+        if(!read_until({'\n', '\r'}, date.username))
+            return false;
 
-    const libaan::crypto::util::password_from_stdin password(0);
-    if(!password) {
-        std::cerr << "Password Error. Too short?\n";
-        return false;
+        const libaan::crypto::util::password_from_stdin password(0);
+        if(!password) {
+            std::cerr << "Password Error. Too short?\n";
+            return false;
+        }
+        date.password = password.password;
+
+        if(!db.add(date)) {
+            std::cerr << "Error: inserting in database failed.\n";
+            return false;
+        }
+
+        std::cout << "added: " << date << "\n";
+    } else { // read from input file
+        std::ifstream fp(config.merge_input_files[0]);
+        if(!fp) {
+            std::cerr << "Invalid input file \"" << config.merge_input_files[0]
+                      << "\"\n";
+            return false;
+        }
+
+        std::list<pw_store::data_type> insert;
+        while(true) {
+            pw_store::data_type date;
+            if(!std::getline(fp, date.url_string))
+                return false;
+            if(!std::getline(fp, date.username))
+                return false;
+            if(!std::getline(fp, date.password))
+                return false;
+            if(date.url_string.empty() && date.username.empty() &&
+               date.password.empty())
+                return false;
+            insert.push_back(date);
+            std::string line;
+            if(!std::getline(fp, line))
+                break;
+            if(line != "###")
+                return false;
+            if(!std::getline(fp, line))
+                break;
+            if(line != "###")
+                return false;
+        }
+
+        for(const auto &date: insert) {
+            if(!db.add(date)) {
+                std::cerr << "Error: inserting in database failed.\n";
+                return false;
+            }
+            std::cerr << "Debug: inserted " << date.to_string() << ".\n";
+        }
     }
-    date.password = password.password;
-
-    if(!db.add(date)) {
-        std::cerr << "Error: inserting in database failed.\n";
-        return false;
-    }
-
-    std::cout << "added: " << date << "\n";
 
     return db.sync();
 }
@@ -155,6 +200,217 @@ bool lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
         std::cout << std::get<0>(match) << ": " << std::get<1>(match) << "\n";
     std::cout << "\n";
     return true;
+}
+
+std::unique_ptr<pw_store_api_cxx::pwstore_api> open_db(const std::string &file)
+{
+    const libaan::crypto::util::password_from_stdin db_password(2);
+    if(!db_password) {
+        std::cerr << "Password Error. Too short?\n";
+        return nullptr;
+    }
+    std::unique_ptr<pw_store_api_cxx::pwstore_api> db(
+        new pw_store_api_cxx::pwstore_api(file, db_password));
+    if(!*db)
+        return nullptr;
+
+    if(!db->empty()) {
+        const auto mod_time = db->time_of_last_write();
+        std::cout << "Authenticity verified. Date of last modification: "
+                  << mod_time << ".\nVerify integrity by comparing dates.(Y/n)\n";
+        {
+            libaan::util::rawmode tty_raw;
+            const auto in = tty_raw.getch();
+            if(in != 'Y')
+                return nullptr;
+        }
+    }
+
+    return db;
+}
+
+// quicker debugging
+std::unique_ptr<pw_store_api_cxx::pwstore_api>
+open_db(const std::string &file, const std::string &password)
+{
+    std::unique_ptr<pw_store_api_cxx::pwstore_api> db(
+        new pw_store_api_cxx::pwstore_api(file, password));
+    if(!*db)
+        return nullptr;
+
+    return db;
+}
+
+bool merge(config_type &config)
+{
+    struct stat s;
+    if(stat(config.merge_input_files[0].c_str(), &s)) {
+        std::cerr << "Invalid input database specified \""
+                  << config.merge_input_files[0] << "\"\n";
+        return false;
+    }
+    if(stat(config.merge_input_files[1].c_str(), &s)) {
+        std::cerr << "Invalid input database specified \""
+                  << config.merge_input_files[1] << "\"\n";
+        return false;
+    }
+
+    if(!stat(config.db_file.c_str(), &s)) {
+        std::cerr << "Output database must not exist. If you want to merge two dbs into an already existing one,\n"
+                  << "use two merge steps.\n";
+        return false;
+    }
+
+    // compare config.merge_input_files
+    const auto in1 = open_db(config.merge_input_files[0], "hallo");
+    if(!in1) {
+        std::cerr << "Could not open database file \""
+                  << config.merge_input_files[0] << "\".\n";
+        return false;
+    }
+    const auto in2 = open_db(config.merge_input_files[1], "hallo");
+    if(!in2) {
+        std::cerr << "Could not open database file \""
+                  << config.merge_input_files[1] << "\".\n";
+        return false;
+    }
+
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+        input1;
+    in1->dump(input1);
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+        input2;
+    in2->dump(input2);
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+        intersection;
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+        complement_of_in1;
+    std::list<std::tuple<pw_store::data_type::id_type, pw_store::data_type>>
+        complement_of_in2;
+
+    struct {
+        bool operator()(const std::tuple<pw_store::data_type::id_type,
+                                         pw_store::data_type> &a,
+                        const std::tuple<pw_store::data_type::id_type,
+                                         pw_store::data_type> &b) const
+        {
+            pw_store::data_type_cmp_enhanced cmp_inner;
+            return cmp_inner(std::get<1>(a), std::get<1>(b));
+        }
+    } cmp;
+/*
+TODO:
+This algorithm has a problem with identical entries. If input1 has 2 identical entries D
+and input2 contains another copy of D, intersection will contain one D and complement A,B
+the other D. The result of the merge is consistent, but the shown output is incorrect.
+Solutions could be, find duplicates in pw_store::database::insert before doing the insert.
+Or provide db_check function which checks for things like:
+  is_sorted -> if no warn and ask yes/no for fix
+  all_unique -> adjacent_find for duplicates, only after sorting, ask yes/no if duplicates
+                should be deleted. out.erase(unique(out.begin, out.end), out.end)
+  integrity_check -> check if date stored in crypto file is sensible.. e.g. 2013->now
+                     should be a good timeframe
+*/
+    std::set_intersection(std::begin(input1), std::end(input1),
+                          std::begin(input2), std::end(input2),
+                          std::inserter(intersection, std::begin(intersection)),
+                          cmp);
+
+    std::cout << "Calculating Intersection.\n";
+    std::cout << "A:\n";
+    for(const auto &k : input1)
+        std::cout << "\t" << std::get<0>(k) << ": "
+                  << std::get<1>(k).to_string(true) << "\n";
+    std::cout << "\n";
+
+    std::cout << "B:\n";
+    for(const auto &k : input2)
+        std::cout << "\t" << std::get<0>(k) << ": "
+                  << std::get<1>(k).to_string(true) << "\n";
+    std::cout << "\n";
+
+    std::cout << "Intersection of A and B:\n";
+    for(const auto &k : intersection)
+        std::cout << "\t" << std::get<0>(k) << ": "
+                  << std::get<1>(k).to_string(true) << "\n";
+    std::cout << "\n";
+
+    std::set_difference(
+        std::begin(input1), std::end(input1), std::begin(input2),
+        std::end(input2),
+        std::inserter(complement_of_in1, std::begin(complement_of_in1)), cmp);
+    std::set_difference(
+        std::begin(input2), std::end(input2), std::begin(input1),
+        std::end(input1),
+        std::inserter(complement_of_in2, std::begin(complement_of_in2)), cmp);
+
+    std::cout << "Complement of A in B:\n";
+    for(const auto &k : complement_of_in1)
+        std::cout << "\t" << std::get<0>(k) << ": "
+                  << std::get<1>(k).to_string(true) << "\n";
+    std::cout << "\n";
+
+    std::cout << "Complement of B in A:\n";
+    for(const auto &k : complement_of_in2)
+        std::cout << "\t" << std::get<0>(k) << ": "
+                  << std::get<1>(k).to_string(true) << "\n";
+    std::cout << "\n";
+
+    bool use_ab = false;
+    std::cout << "Use complement of A in B?(Y/n)\n";
+    {
+        libaan::util::rawmode tty_raw;
+        const auto in = tty_raw.getch();
+        if(in == 'Y')
+            use_ab = true;
+    }
+
+    bool use_ba = false;
+    std::cout << "Use complement of B in A?(Y/n)\n";
+    {
+        libaan::util::rawmode tty_raw;
+        const auto in = tty_raw.getch();
+        if(in == 'Y')
+            use_ba = true;
+    }
+
+    auto out = open_db(config.db_file);
+    if(!out) {
+        std::cerr << "Could not create database file \"" << config.db_file
+                  << "\".\n";
+        return false;
+    }
+
+    // insert intersecting elements
+    for(const auto &date: intersection) {
+        if(!out->add(std::get<1>(date))) {
+            std::cerr << "Error: inserting in database failed.\n";
+            return false;
+        }
+        std::cerr << "Debug: inserted " << std::get<1>(date).to_string() << ".\n";
+    }
+
+    if(use_ab) {
+        for(const auto &date: complement_of_in1) {
+            if(!out->add(std::get<1>(date))) {
+                std::cerr << "Error: inserting in database failed.\n";
+                return false;
+            }
+            std::cerr << "Debug: inserted " << std::get<1>(date).to_string() << ".\n";
+        }
+    }
+
+    if(use_ba) {
+        for(const auto &date: complement_of_in2) {
+            if(!out->add(std::get<1>(date))) {
+                std::cerr << "Error: inserting in database failed.\n";
+                return false;
+            }
+            std::cerr << "Debug: inserted " << std::get<1>(date).to_string() << ".\n";
+        }
+    }
+
+    return out->sync();
 }
 
 bool get(pw_store_api_cxx::pwstore_api &db, config_type &config)
@@ -265,14 +521,6 @@ bool init(pw_store_api_cxx::pwstore_api &db)
     return db.sync();
 }
 
-bool interactive_add(pw_store_api_cxx::pwstore_api &)
-{
-    // iterate and wait for input until eof.
-    // read in data just like in add()
-    // then ask for y/n to insert
-    return false;
-}
-
 const std::string ui_help = "<Enter>        start command mode.\n"
                             "k              kill input.\n"
                             "l              dump db\n"
@@ -301,9 +549,6 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
         std::string print_after_terminal_reset;
     } raii;
 
-    // TODO: select would be better, but 150ms cycletime works
-    //       good enough for now and does not seem to have much
-    //       cpu impact.
     const std::chrono::milliseconds dura(150);
     const long DEFAULT_TIMEOUT_SECS = 120;
     auto time_of_last_change = std::chrono::high_resolution_clock::now();
@@ -514,6 +759,9 @@ bool interactive_lookup(pw_store_api_cxx::pwstore_api &db, config_type &config)
 
 bool run(config_type config)
 {
+    if(config.mode == config_type::MERGE)
+        return merge(config);
+
     const libaan::crypto::util::password_from_stdin db_password(2);
     if(!db_password) {
         std::cerr << "Password Error. Too short?\n";
@@ -538,16 +786,13 @@ bool run(config_type config)
     bool ret = true;
     switch(config.mode) {
     case config_type::ADD:
-        ret = add(db);
+        ret = add(db, config);
         break;
     case config_type::DUMP:
         ret = dump(db);
         break;
     case config_type::INIT:
         ret = init(db);
-        break;
-    case config_type::INTERACTIVE_ADD:
-        ret = interactive_add(db);
         break;
     case config_type::INTERACTIVE_LOOKUP:
         ret = interactive_lookup(db, config);
@@ -567,6 +812,9 @@ bool run(config_type config)
     case config_type::GET:
         ret = get(db, config);
         break;
+    case config_type::MERGE:
+        ret = false;
+        break;
     }
 
     return ret;
@@ -584,14 +832,25 @@ void usage(int, char *argv[])
         << "    -o            dump retrieved password to stdout\n"
         << "    -i            interactive\n\n"
         << "  possible commands are:\n"
-        << "    add [-i]\n"
+        << "    add <optional_input_file>\n"
+        << "      Interactively add one datum to database if no input file was specified.\n"
+        << "      Input file must have format: <entry>###\\n###\\n<entry>..., where <entry> is:\n"
+        << "      url\\nuser\\npassword\\n"
         << "    dump\n"
+        << "      Dump database content.\n"
         << "    lookup <optional-key> [-i] [-o] [-n <uid>]\n"
+        << "      Print all entries that match the specified uids or the specified key.\n"
         << "    get                   [-o] -n <uid>\n"
+        << "      Retrieve password for entry with speciefied uid.\n"
+        << "    merge dbfile1 dbfile2 result\n"
+        << "      Compare dbfile1 and dbfile2 and try to merge them in a new dbfile result.\n"
         << "    remove                (-n <uid>)+ [--force]\n"
+        << "      Remove specified entry.\n"
         << "    change_passwd         change password and reencrypt db-file\n"
+        << "      Change encryption key of database.\n"
         << "    gen_passwd            generate a password and store it in "
            "db-file\n"
+        << "      Same as add, but password is created from pseudo random pool.\n"
         << "  database name to be used is taken from:\n"
         << "    environment variable PWSTORE_DB_FILE\n"
         << "    -f <db-file> flag\n"
@@ -644,9 +903,8 @@ bool backup_db(const std::string &db_file)
     const std::string base(basename(BACKUP_FILE_PREFIX));
     const auto dir = dirname(db_file);
 
-    auto const lambda = [&base, &count_backup_files](const std::string &path,
+    auto const lambda = [&base, &count_backup_files](const std::string &,
                                                      const struct dirent *p) {
-        (void)path;
         const std::string entry(p->d_name);
         if(!std::equal(base.begin(), base.end(), entry.begin()))
             return;
@@ -712,8 +970,26 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                 config.mode = config_type::GEN_PASSWD;
             else if(!std::strcmp(argv[arg_index], "get"))
                 config.mode = config_type::GET;
-            else
-                config.lookup_key.assign(argv[arg_index]);
+            else if(!std::strcmp(argv[arg_index], "merge"))
+                config.mode = config_type::MERGE;
+            else {
+                if(config.mode == config_type::LOOKUP) {
+                    config.lookup_key.assign(argv[arg_index]);
+                } else if(config.mode == config_type::MERGE) {
+                    if(!config.merge_input_files[0].length())
+                        config.merge_input_files[0].assign(argv[arg_index]);
+                    else if(config.merge_input_files[0].length()
+                            && !config.merge_input_files[1].length())
+                        config.merge_input_files[1].assign(argv[arg_index]);
+                    else if(config.merge_input_files[0].length()
+                            && config.merge_input_files[1].length()
+                            && !config.db_file.length())
+                        config.db_file.assign(argv[arg_index]);
+                } else if(config.mode == config_type::ADD) {
+                    if(!config.merge_input_files[0].length())
+                        config.merge_input_files[0].assign(argv[arg_index]);
+                }
+            }
         }
     }
 
@@ -723,13 +999,10 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
             std::cerr << "Error: <optional-key> unneeded in interactive mode\n";
             return false;
         }
-        if(config.mode == config_type::ADD)
-            config.mode = config_type::INTERACTIVE_ADD;
-        else if(config.mode == config_type::LOOKUP)
+        if(config.mode == config_type::LOOKUP)
             config.mode = config_type::INTERACTIVE_LOOKUP;
         else {
-            std::cerr << "Error: interactive mode only availabler for add or "
-                         "lookup commands.\n";
+            std::cerr << "Error: interactive mode only available for lookup.\n";
             return false;
         }
     } else {
@@ -773,6 +1046,17 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                      "Read the usage instructions.\n";
         return false;
     }
+    std::cout << config.merge_input_files[0] << "\n"
+              << config.merge_input_files[1] << "\n"
+              << config.db_file << "\n";
+
+    if(config.mode == config_type::MERGE)
+        if(!config.merge_input_files[0].length()
+           || !config.merge_input_files[1].length()
+           || !config.db_file.length()) {
+            std::cout << "Invalid parameters for merge command.\n";
+            return false;
+        }
 
     if(!config.db_file.length()) {
         const auto env_db = getenv("PWSTORE_DB_FILE");
@@ -850,10 +1134,10 @@ int main(int argc, char *argv[])
     case config_type::INTERACTIVE_LOOKUP:
     case config_type::LOOKUP:
     case config_type::GET:
+    case config_type::MERGE:
         break;
     case config_type::ADD:
     case config_type::INIT:
-    case config_type::INTERACTIVE_ADD:
     case config_type::REMOVE:
     case config_type::CHANGE_PASSWD:
     case config_type::GEN_PASSWD:
