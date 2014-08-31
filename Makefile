@@ -6,8 +6,8 @@ APP=pwstore
 INSTALL_BIN_DIR=/opt/usr/bin
 INSTALL_SHARE_DIR=/opt/usr/share
 
-#INCLUDES=-I.deps/
-INCLUDES=-I..
+INCLUDES=-I.deps/
+#INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc
@@ -30,7 +30,6 @@ install: pwstore qpwstore
 	@printf "\nTo enable bash completion for $(APP).\nAdd to .bashrc:\n\tsource $(INSTALL_SHARE_DIR)/.pwstore-completion.sh\n"
 	cp qpwstore/qpwstore $(INSTALL_BIN_DIR)
 
-#QMAKE:=/opt/qt/5.2.1/gcc_64/bin/qmake
 QMAKE:=qmake-qt5
 qpwstore_init:
 	(cd qpwstore/; $(QMAKE) -makefile)
