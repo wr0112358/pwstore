@@ -107,10 +107,8 @@ private:
     void log_err(const std::string &msg);
     void log_info(const std::string &msg);
 
-#ifndef NO_GOOD
 public slots:
     void handle_sigint();
-#endif
 
 private slots:
     void create_pressed();

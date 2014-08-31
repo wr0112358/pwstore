@@ -1,5 +1,5 @@
 CXX=clang++
-CXX_FLAGS=-std=c++11 -g -Wall -Werror -Weffc++  -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic
+CXX_FLAGS=-std=c++11 -g -Wall -Werror -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic # -Weffc++
 DEFINES=
 APP=pwstore
 
@@ -22,7 +22,7 @@ pwstore: $(objects_pwstore)
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $^ -o $(APP) $(LDFLAGS)
 
 clean: clean_qpwstore
-	rm -f *.o pwstore pwstore.exe *.a test_c
+	rm -f *.o pwstore pwstore.exe *.a test_c *.tar
 
 install: pwstore qpwstore
 	cp pwstore $(INSTALL_BIN_DIR)
@@ -57,7 +57,6 @@ clean_qpwstore:
 		make -C qpwstore/ distclean; \
 	fi
 
-
 # windows build of pwstore
 win64: CXX=x86_64-w64-mingw32-g++
 win64: DEFINES=-DNO_GOOD $(MINGW_DEFINES)
@@ -65,9 +64,11 @@ win64: DEFINES=-DNO_GOOD $(MINGW_DEFINES)
 win64: LDFLAGS=-lssl -lcrypto -lgdi32 -lws2_32
 win64: APP=pwstore.exe
 win64: clean pwstore
-	./win_install.sh
 
 # windows build of qpwstore
 qpwstore_win: QMAKE=/usr/bin/mingw32-qmake-qt5
 qpwstore_win: qpwstore_init
 	make -j 16 -C qpwstore/
+
+qpwstore_win_install:
+	scripts/windows_pack.sh

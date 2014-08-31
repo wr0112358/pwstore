@@ -27,13 +27,20 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <thread>
 #include <unistd.h>
 
-#include "libaan/crypto_util.hh"
 #include "libaan/file_util.hh"
 #include "libaan/terminal_util.hh"
+#ifndef NO_GOOD
 #include "libaan/x11_util.hh"
+#endif
 
 #include "pwstore.hh"
 #include "pwstore_api_cxx.hh"
+
+#include "libaan/crypto_util.hh"
+
+#ifdef NO_GOOD
+#define CTRL(x)(x&037)
+#endif
 
 namespace
 {
@@ -599,7 +606,7 @@ struct pathsep
     bool operator()(char ch) const { return ch == '/'; }
 };
 #else
-struct patsep
+struct pathsep
 {
     bool operator()(char ch) const { return ch == '\\' || ch == '/'; }
 };
@@ -618,6 +625,12 @@ std::string basename(std::string const &pathname)
         pathname.end());
 }
 
+#ifdef NO_GOOD
+bool backup_db(const std::string &)
+{
+    return false;
+}
+#else
 bool backup_db(const std::string &db_file)
 {
     std::string buff;
@@ -651,6 +664,7 @@ bool backup_db(const std::string &db_file)
               << "backup_files: " << count_backup_files << "\n";
     return true;
 }
+#endif
 
 bool parse_and_check_args(int argc, char *argv[], config_type &config)
 {

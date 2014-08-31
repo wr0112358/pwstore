@@ -30,9 +30,9 @@
 #include "list_entry.hh"
 #include "../pwstore_api_cxx.hh"
 
+#ifndef NO_GOOD
 int main_window::sigintfd[2];
 
-#ifndef NO_GOOD
 namespace {
 bool setup_signals()
 {
@@ -166,9 +166,11 @@ void main_window::handle_sigint(int)
     char a = 1;
     (void)::write(sigintfd[0], &a, sizeof(a));
 }
+#endif
 
 void main_window::handle_sigint()
 {
+#ifndef NO_GOOD
     notify_sigint->setEnabled(false);
     char tmp;
     (void)::read(sigintfd[1], &tmp, sizeof(tmp));
@@ -177,8 +179,8 @@ void main_window::handle_sigint()
 
     // reset the handler
     notify_sigint->setEnabled(true);
-}
 #endif
+}
 
 void main_window::keyPressEvent(QKeyEvent *event)
 {
