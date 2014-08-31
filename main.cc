@@ -1051,9 +1051,6 @@ bool parse_and_check_args(int argc, char *argv[], config_type &config)
                      "Read the usage instructions.\n";
         return false;
     }
-    std::cout << config.merge_input_files[0] << "\n"
-              << config.merge_input_files[1] << "\n"
-              << config.db_file << "\n";
 
     if(config.mode == config_type::MERGE)
         if(!config.merge_input_files[0].length()
