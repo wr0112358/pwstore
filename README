@@ -9,6 +9,9 @@ qt gui. Fast lookup of keys/values with partial string matching.
 
 
 Usage
+
+  make all
+
   Gui:
   qpwstore/qpwstore
 
@@ -62,20 +65,3 @@ Installation
 	      ) end),
 
     And restart with: META-C-r
-
-Missing/Bugs
-  o qpwstore: close button + C-W for close
-
-  o pwstore cli:
-    Disabling ECHO in termios settings has no effect.
-    Alternate mode does not clear the screen correctly using ssh in cygwin
-    terminal.
-
-  o New mode for lookup, that is enabled by cmdline flag or by a command_option
-    in interactive mode: copy first username and if successfull copy password.
-    (Provide option to copy first username, then after selection request the
-    password.)
-
-  o windows pwstore cli:
-    Interactive lookup not working yet. port terminal_util.hh.
-    Build/install instructions.

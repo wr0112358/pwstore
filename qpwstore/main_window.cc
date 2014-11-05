@@ -40,7 +40,7 @@ bool setup_signals()
 
     sigint.sa_handler = main_window::handle_sigint;
     sigemptyset(&sigint.sa_mask);
-    sigint.sa_flags |= SA_RESTART;
+    sigint.sa_flags = SA_RESTART;
 
     if(sigaction(SIGINT, &sigint, 0) > 0)
         return false;

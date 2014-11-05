@@ -1,13 +1,16 @@
 CXX=g++
-CXX_FLAGS=-std=c++11 -g -Wall -Werror -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic # -Weffc++
+CXX_FLAGS=-std=c++11 -g -Wall -Wextra -Wpedantic -Wpointer-arith -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wno-long-long -Wwrite-strings -pedantic
+# -Weffc++
+#  -Werror
+
 DEFINES=
 APP=pwstore
 
 INSTALL_BIN_DIR=/opt/usr/bin
 INSTALL_SHARE_DIR=/opt/usr/share
 
-INCLUDES=-I.deps/
-#INCLUDES=-I..
+#INCLUDES=-I.deps/
+INCLUDES=-I..
 LDFLAGS=-lssl -lcrypto -lX11
 
 sources_pwstore := pwstore.cc main.cc pwstore_api_cxx.cc
